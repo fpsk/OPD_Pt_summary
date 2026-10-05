@@ -47,10 +47,17 @@ It synthesizes **Patient Conditions**, **Objective Findings (Labs & Narrative Ra
 ## 🛠️ Architecture & Port Configuration
 
 - **Port**: `http://localhost:5008` (Dedicated port, avoiding conflict with FDCs on 5007)
-- **Hospital MCP REST Gateway**: `http://172.22.135.188:38091`
-- **OMOP CDM Database**: `172.22.135.182:5432` (PostgreSQL `tomop`)
-- **Local AI LLM Server**: `http://localhost:1234/v1` (Powered by on-premise NVIDIA RTX A6000, 48GB VRAM)
+- **Hospital MCP REST Gateway / OMOP CDM DB**: configured in `.env` (never committed)
+- **Local AI LLM Server**: LM Studio, `http://localhost:1234/v1`, model `openai/gpt-oss-20b` (NVIDIA RTX A6000, 48GB VRAM)
 - **Cache**: Local SQLite database (`summaries_cache.db`) for caching NLP and AI extractions.
+
+### Setup
+
+```
+copy .env.example .env      # then fill in hospital API / OMOP credentials
+pip install flask python-dotenv
+python app.py
+```
 
 ---
 
@@ -58,15 +65,25 @@ It synthesizes **Patient Conditions**, **Objective Findings (Labs & Narrative Ra
 
 ```
 d:/Antigravity_workspace/Summaries/
-├── config.py                     # System configuration & endpoints
-├── patient_mcp_client.py         # REST API, OMOP DB & Cloud_Data roster loader
-├── report_nlp_engine.py          # Deterministic + RTX A6000 AI extractor
-├── clinical_summary_engine.py    # Multi-domain clinical synthesis & EMR note generator
-├── app.py                        # Flask application server (port 5008)
-├── templates/
-│   └── index.html                # Responsive clinical dashboard template
-├── static/
-│   ├── css/styles.css            # Medical UI styling & dark/light theme
-│   └── js/app.js                 # Dynamic UI controller & clipboard handlers
-└── README.md                     # Documentation
+├── app.py                          # Flask app factory (port 5008)
+├── config.py                       # Settings; secrets loaded from .env
+├── .env.example                    # Template for required environment variables
+├── services/                       # Backend logic (no Flask imports)
+│   ├── __init__.py                 # Shared singletons (summary/NLP engines, MCP client, photos)
+│   ├── patient_mcp_client.py       # REST API, OMOP DB & Cloud_Data roster loader
+│   ├── clinical_summary_engine.py  # Multi-domain clinical synthesis & EMR note generator
+│   ├── report_nlp_engine.py        # Deterministic report extractor + LLM deep extraction
+│   ├── drug_photo_service.py       # Pill photo / appearance lookup (Medication_Info)
+│   ├── llm_client.py               # Single LM Studio (OpenAI-compatible) client
+│   └── clinical_chat.py            # Chat grounding, prompts, offline fallback
+├── routes/                         # Flask blueprints (thin HTTP wrappers)
+│   ├── pages.py  patient.py  drugs.py  ai.py  system.py
+├── templates/index.html            # Clinical dashboard template
+└── static/
+    ├── css/styles.css              # Medical UI styling & dark/light theme
+    └── js/
+        ├── main.js                 # Entry point (ES module bootstrap)
+        └── modules/                # state, utils, patient, banner, conditions, labs,
+                                    # reports, meds, drug-photo, chat, correlation,
+                                    # workspace, theme, events
 ```
