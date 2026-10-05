@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OPD Patient Clinical Summarizer | 門診病患綜合摘要系統</title>
+    <!-- Google Fonts & Bootstrap Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/static/css/styles.css?v=20261005q">
+</head>
+<body class="theme-light">
+    <!-- Top Navigation & Control Bar -->
+    <header class="app-header">
+        <div class="header-left">
+            <div class="app-brand">
+                <i class="bi bi-hospital"></i>
+                <div class="brand-text">
+                    <span class="brand-title">OPD Patient Summarizer</span>
+                    <span class="brand-subtitle">門診臨床摘要與病歷預覽系統</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="header-center">
+            <!-- Patient Search & Date Form -->
+            <div class="search-box-group">
+                <div class="input-with-icon">
+                    <i class="bi bi-search"></i>
+                    <input type="text" id="patientIdInput" placeholder="身分證號 / 病歷號 (例: B100134889)" value="B100134889">
+                </div>
+                <div class="date-with-icon">
+                    <i class="bi bi-calendar3"></i>
+                    <input type="text" id="clinicDateInput" placeholder="門診日 (2026/09/01)" value="2026/09/01" title="門診日期 (YYYY/MM/DD 或 民國日)">
+                </div>
+                <button id="searchBtn" class="btn btn-primary">
+                    <i class="bi bi-arrow-clockwise"></i> 查詢摘要
+                </button>
+            </div>
+
+            <!-- Top Bar Choice: Reports vs Medications vs Correlation (Main Workspace) -->
+            <div class="topbar-choice-group" id="topbarChoiceGroup" role="tablist">
+                <button type="button" class="topbar-choice-btn active" id="topbarChoiceReports" title="顯示檢驗與影像病理報告 (主要工作區)">
+                    <i class="bi bi-file-earmark-medical"></i> 檢驗與影像報告
+                </button>
+                <button type="button" class="topbar-choice-btn" id="topbarChoiceMeds" title="顯示目前處方與用藥 (主要工作區)">
+                    <i class="bi bi-capsule"></i> 目前用藥
+                    <span class="badge badge-count" id="topbarMedBadge">0</span>
+                </button>
+                <button type="button" class="topbar-choice-btn" id="topbarChoiceCorrelation" title="顯示藥效與檢驗時序對照分析 (主要工作區)">
+                    <i class="bi bi-graph-up-arrow text-warning"></i> 藥效與檢驗對照
+                </button>
+            </div>
+        </div>
+
+        <div class="header-right">
+            <!-- System Status Badges -->
+            <div class="status-indicator-badge" title="Hospital REST API Gateway">
+                <span class="dot dot-success"></span>
+                <span>MCP Cloud</span>
+            </div>
+            <div class="status-indicator-badge" id="aiStatusBadge" title="AI server (LM Studio: openai/gpt-oss-20b)">
+                <span class="dot dot-success"></span>
+                <span>AI server</span>
+            </div>
+            <button id="themeToggleBtn" class="theme-btn" title="切換深淺模式">
+                <i class="bi bi-moon-stars"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="app-main">
+        <!-- Patient Banner Header -->
+        <section class="patient-banner" id="patientBanner">
+            <div class="banner-left">
+                <div class="patient-avatar">
+                    <i class="bi bi-person-circle"></i>
+                </div>
+                <div class="patient-identity">
+                    <div class="identity-name-row">
+                        <h1 class="patient-name" id="ptName">病患資料載入中...</h1>
+                        <span class="badge badge-meta" id="ptGenderAge">-- / -- 歲</span>
+                        <span class="badge badge-outline" id="ptChartNo">病歷號: --</span>
+                        <span class="badge badge-outline" id="ptIdNo">ID: --</span>
+                    </div>
+                    <div class="badges-row" id="clinicalBadgesContainer">
+                        <!-- Dynamic Clinical Badges (ESRD, CAD, DM, HTN, etc.) -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Metric Quick Snapshot -->
+            <div class="banner-center">
+                <div class="metric-card" id="metricEgfr">
+                    <span class="metric-label">eGFR</span>
+                    <span class="metric-value">--</span>
+                    <span class="metric-unit">mL/min</span>
+                </div>
+                <div class="metric-card" id="metricCr">
+                    <span class="metric-label">Creatinine</span>
+                    <span class="metric-value">--</span>
+                    <span class="metric-unit">mg/dL</span>
+                </div>
+                <div class="metric-card" id="metricHb">
+                    <span class="metric-label">Hb (血色素)</span>
+                    <span class="metric-value">--</span>
+                    <span class="metric-unit">g/dL</span>
+                </div>
+                <div class="metric-card" id="metricGlucose">
+                    <span class="metric-label">Glucose (AC)</span>
+                    <span class="metric-value">--</span>
+                    <span class="metric-unit">mg/dL</span>
+                </div>
+            </div>
+
+            <div class="banner-right">
+                <button id="openEmrNoteBtn" class="btn btn-emr-copy">
+                    <i class="bi bi-clipboard2-pulse"></i> 1-Click 產出門診病歷摘要
+                </button>
+            </div>
+        </section>
+
+        <!-- 2-Column Clinical Workspace: 1/3.5 Problem Lists vs 2.5/3.5 Main Workspace -->
+        <div class="clinical-grid">
+            <!-- COLUMN 1 (1/3.5 of display): Conditions & Problem List -->
+            <div class="clinical-col col-problems" id="colConditions">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <i class="bi bi-file-medical text-primary"></i>
+                            <span>問題清單 (Problem List)</span>
+                        </div>
+                        <div class="card-tabs" id="conditionTabs">
+                            <button class="tab-btn active" id="tabAllCond">全部 (<span id="totalDiagCount">0</span>)</button>
+                            <button class="tab-btn" id="tabAcuteCond">🔴 急性 (<span id="acuteCount">0</span>)</button>
+                            <button class="tab-btn" id="tabChronicCond">🟢 慢性 (<span id="chronicCount">0</span>)</button>
+                        </div>
+                    </div>
+                    <div class="card-body scrollable" id="conditionsCardBody">
+                        <!-- Acute and Chronic Diagnoses Containers -->
+                        <div class="condition-section" id="acuteSection">
+                            <div class="diag-section-header text-danger" id="acuteSectionHeader">
+                                <i class="bi bi-exclamation-circle-fill"></i> 近期急性病況 (含記錄日期)
+                            </div>
+                            <ul class="diag-list acute-list" id="acuteConditionList">
+                                <li class="empty-state">尚無急性診斷紀錄</li>
+                            </ul>
+                        </div>
+
+                        <div class="condition-section mt-2" id="chronicSection">
+                            <div class="diag-section-header text-success" id="chronicSectionHeader">
+                                <i class="bi bi-shield-check"></i> 慢性長期追蹤問題 (依專科分類)
+                            </div>
+                            <ul class="diag-list chronic-list" id="chronicConditionList">
+                                <li class="empty-state">尚無慢性診斷清單</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <i class="bi bi-activity text-info"></i>
+                            <span>手術與處置歷史 (Surgical & Interventions)</span>
+                        </div>
+                        <span class="card-count-badge" id="surgeryCount">0</span>
+                    </div>
+                    <div class="card-body scrollable">
+                        <ul class="surg-list" id="surgeryList">
+                            <li class="empty-state">尚無處置手術紀錄</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- COLUMN 2 (2.5/3.5 of display): Main Workspace (Reports vs Medications) -->
+            <div class="clinical-col col-main-workspace" id="colMainWorkspace">
+                <!-- Workspace Sub-navigation / Mode Switcher -->
+                <div class="workspace-nav-bar d-flex justify-content-between align-items-center mb-2">
+                    <div class="btn-group workspace-tab-group" role="tablist">
+                        <button type="button" class="btn btn-sm btn-workspace active" id="wsChoiceReports">
+                            <i class="bi bi-file-earmark-medical text-primary"></i> 檢驗與影像病理報告 (Reports)
+                        </button>
+                        <button type="button" class="btn btn-sm btn-workspace" id="wsChoiceMeds">
+                            <i class="bi bi-capsule text-success"></i> 目前處方與用藥 (Medications) (<span id="wsMedCount">0</span>)
+                        </button>
+                        <button type="button" class="btn btn-sm btn-workspace" id="wsChoiceCorrelation">
+                            <i class="bi bi-graph-up-arrow text-warning"></i> 藥效與檢驗時序對照 (Lab & Drug Effect)
+                        </button>
+                    </div>
+                    <div class="workspace-indicator-text text-muted small">
+                        <i class="bi bi-layout-split"></i> 主要工作區 (2.5/3.5 版面)
+                    </div>
+                </div>
+
+                <!-- VIEW 1: Objective Findings (Labs & Narrative Radiology/Pathology) -->
+                <div id="workspaceReports" class="workspace-pane">
+                    <!-- Lab Panel -->
+                    <div class="card">
+                        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                            <div class="card-title mb-0">
+                                <i class="bi bi-eyedropper text-warning"></i>
+                                <span>檢驗報告與時序趨勢 (Laboratory Reports & Trends)</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <!-- View Mode Toggle: Flowsheet (時序矩陣) vs List (清單檢視) -->
+                                <div class="btn-group view-mode-group" id="labViewModeGroup" role="group">
+                                    <button type="button" class="btn btn-sm btn-outline-primary active" id="btnLabFlowsheet" title="切換為時序矩陣檢視 (時間為X軸，項目為Y軸)">
+                                        <i class="bi bi-grid-3x3"></i> 時序矩陣 Flowsheet
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="btnLabList" title="切換為清單列表檢視">
+                                        <i class="bi bi-list-ul"></i> 清單檢視 List
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Category Tabs (6 Physiological Systems + All) -->
+                        <div class="card-tabs-row px-3 pt-2 pb-1 border-bottom" style="background: var(--bg-surface); overflow-x: auto;">
+                            <div class="card-tabs" id="labTabs">
+                                <button class="tab-btn active" data-tab="all" id="tabLabAll">全部 All (<span id="labAllCount">0</span>)</button>
+                                <button class="tab-btn" data-tab="liver" id="tabLabLiver">肝膽 Liver (<span id="labLiverCount">0</span>)</button>
+                                <button class="tab-btn" data-tab="hematological" id="tabLabHematological">血液 Hematological (<span id="labHematologicalCount">0</span>)</button>
+                                <button class="tab-btn" data-tab="renal" id="tabLabRenal">腎功能 Renal (<span id="labRenalCount">0</span>)</button>
+                                <button class="tab-btn" data-tab="metabolic" id="tabLabMetabolic">生化代謝 Metabolic (<span id="labMetabolicCount">0</span>)</button>
+                                <button class="tab-btn" data-tab="immunological" id="tabLabImmunological">免疫發炎 Immunological (<span id="labImmunologicalCount">0</span>)</button>
+                                <button class="tab-btn" data-tab="others" id="tabLabOthers">其他 Other (<span id="labOthersCount">0</span>)</button>
+                            </div>
+                        </div>
+
+                        <div class="card-body" id="labPanelBody">
+                            <!-- Dedicated Liver Assessment Widget (FIB-4, APRI, AST/ALT Ratio) -->
+                            <div id="liverAssessmentCard" class="liver-assessment-box d-none mb-3">
+                                <div class="liver-assessment-header d-flex justify-content-between align-items-center">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="bi bi-shield-shaded text-primary"></i>
+                                        <strong class="liver-box-title">肝纖維化與肝功能風險評估 (Liver Fibrosis & Risk)</strong>
+                                    </div>
+                                    <span class="badge badge-meta" id="liverSeniorNote">年齡校正切點</span>
+                                </div>
+                                <div class="liver-scores-grid mt-2">
+                                    <div class="score-card">
+                                        <div class="score-card-title">FIB-4 Index</div>
+                                        <div class="score-card-val-row">
+                                            <span class="score-value" id="fib4Value">--</span>
+                                            <span class="badge" id="fib4Badge">--</span>
+                                        </div>
+                                        <div class="score-desc" id="fib4Desc">--</div>
+                                    </div>
+                                    <div class="score-card">
+                                        <div class="score-card-title">APRI (AST / PLT)</div>
+                                        <div class="score-card-val-row">
+                                            <span class="score-value" id="apriValue">--</span>
+                                            <span class="badge" id="apriBadge">--</span>
+                                        </div>
+                                        <div class="score-desc" id="apriDesc">--</div>
+                                    </div>
+                                    <div class="score-card">
+                                        <div class="score-card-title">AST / ALT 比值 (De Ritis)</div>
+                                        <div class="score-card-val-row">
+                                            <span class="score-value" id="astAltRatioValue">--</span>
+                                            <span class="badge" id="astAltRatioBadge">--</span>
+                                        </div>
+                                        <div class="score-desc" id="astAltRatioDesc">--</div>
+                                    </div>
+                                </div>
+                                <div class="liver-biomarkers-strip mt-2" id="liverBiomarkersStrip"></div>
+                            </div>
+
+                            <!-- 1. Flowsheet View Container (Matrix Table with Sticky X & Y axes) -->
+                            <div id="labFlowsheetWrapper" class="lab-flowsheet-wrapper">
+                                <div class="flowsheet-toolbar d-flex align-items-center justify-content-between mb-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="input-group input-group-sm" style="width: 220px;">
+                                            <span class="input-group-text py-1 px-2" style="font-size: 11px;"><i class="bi bi-search"></i></span>
+                                            <input type="text" id="flowsheetSearchInput" class="form-control form-control-sm" placeholder="篩選檢驗項目 (Filter)..." style="font-size: 11px; padding: 3px 6px;">
+                                        </div>
+                                        <span class="text-muted small" id="flowsheetDateSpan" style="font-size: 11px;"></span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span class="badge badge-meta" id="flowsheetStatsBadge" style="font-size: 11px;">0 項 &bull; 0 日期</span>
+                                        <button type="button" class="btn btn-xs btn-outline-secondary" id="btnScrollLeft" title="橫向滾動至早期檢驗結果 (往左滑動)" style="font-size: 11px; padding: 2px 6px;">
+                                            <i class="bi bi-chevron-double-left"></i> 早期結果
+                                        </button>
+                                        <button type="button" class="btn btn-xs btn-outline-secondary" id="btnScrollRight" title="橫向滾動至最新報告 (右緣)" style="font-size: 11px; padding: 2px 6px;">
+                                            最新報告 <i class="bi bi-chevron-double-right"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Extra Top Horizontal Scroll Bar -->
+                                <div class="flowsheet-top-scroll-container" id="flowsheetTopScrollContainer">
+                                    <div class="flowsheet-top-scroll-label">
+                                        <i class="bi bi-arrow-left-right text-primary"></i> 頂部時間軸捲軸
+                                    </div>
+                                    <div class="flowsheet-top-scrollbar-track" id="flowsheetTopScrollTrack" title="可水平拖曳頂部捲軸快速捲動檢驗時間軸">
+                                        <div class="flowsheet-top-scrollbar-dummy" id="flowsheetTopScrollDummy"></div>
+                                    </div>
+                                </div>
+
+                                <div class="lab-flowsheet-container" id="labFlowsheetContainer">
+                                    <div class="empty-state p-4 text-center">尚無檢驗時序資料</div>
+                                </div>
+                            </div>
+
+                            <!-- 2. Traditional List View Container (Toggleable) -->
+                            <div id="labListWrapper" class="lab-table-container d-none">
+                                <table class="clinical-table" id="labTable">
+                                    <thead>
+                                        <tr>
+                                            <th>檢驗項目 (Item)</th>
+                                            <th>數值 (Value)</th>
+                                            <th>單位 (Unit)</th>
+                                            <th>參考區間 (Ref Range)</th>
+                                            <th>檢驗日 (Date)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="labTableBody">
+                                        <tr><td colspan="5" class="empty-state">無檢驗紀錄</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Narrative Radiology, Procedure & Pathology Reports -->
+                    <div class="card mt-3">
+                        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                            <div class="card-title mb-0">
+                                <i class="bi bi-journal-medical text-danger"></i>
+                                <span>影像、處置與病理報告 (Imaging, Procedures & Pathology)</span>
+                            </div>
+                            <div class="imaging-filter-group" id="imagingTabs">
+                                <button class="tab-btn active" data-tab="all" id="tabImgAll">全部 (<span id="reportCount">0</span>)</button>
+                                <button class="tab-btn" data-tab="ct_mri" id="tabImgCtMri">⚡ CT / MRI (<span id="ctMriCount">0</span>)</button>
+                                <button class="tab-btn" data-tab="pathology" id="tabImgPathology">🔬 病理報告 (Pathology) (<span id="pathologyCount">0</span>)</button>
+                                <button class="tab-btn" data-tab="endoscopy_pta" id="tabImgEndo">內視鏡/處置 (<span id="endoCount">0</span>)</button>
+                                <button class="tab-btn" data-tab="xray_sono" id="tabImgXray">X光/超音波 (<span id="xrayCount">0</span>)</button>
+                            </div>
+                        </div>
+                        <div class="card-body scrollable" id="reportsContainer">
+                            <div class="empty-state">無影像或病理報告紀錄</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VIEW 2: Current Medications & Chronic Refills (Occupies 2/3 when toggled) -->
+                <div id="workspaceMedications" class="workspace-pane d-none">
+                    <div class="card workspace-medications-card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i class="bi bi-capsule text-success"></i>
+                                <span>門診用藥時序與餘藥分析 (Medication Timeline & Drug Remains)</span>
+                                <span class="badge badge-meta" id="medTimelineStatsBadge">0 項藥品</span>
+                            </div>
+                            
+                            <!-- View Toggle & Filter Group -->
+                            <div class="med-header-controls">
+                                <!-- Mode: Timeline Graph (Default) vs Traditional List -->
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button type="button" class="tab-btn active" id="btnMedViewTimeline" title="圖形化時序軌道圖 (顯示重疊與餘藥量)">
+                                        <i class="bi bi-graph-up"></i> 時序圖 (Timeline)
+                                    </button>
+                                    <button type="button" class="tab-btn" id="btnMedViewList" title="傳統處方卡片清單">
+                                        <i class="bi bi-list-ul"></i> 清單檢視 (List)
+                                    </button>
+                                </div>
+
+                                <!-- Filter Scope: All (Default to show more drugs) vs Active vs 6 Months -->
+                                <div class="med-filter-group" id="medFilterScopeGroup">
+                                    <button class="tab-btn active" id="medFilterAll" data-filter="all">
+                                        全部歷史 (<span id="totalMedCount">0</span>)
+                                    </button>
+                                    <button class="tab-btn" id="medFilterActive" data-filter="active">
+                                        進行中 (<span id="activeMedCount">0</span>)
+                                    </button>
+                                    <button class="tab-btn" id="medFilter6M" data-filter="6m">
+                                        近 6 個月
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Safety Alerts Box -->
+                        <div class="safety-alerts-box d-none" id="safetyAlertsBox">
+                            <div class="alert-box-title">
+                                <i class="bi bi-exclamation-triangle-fill"></i> 臨床用藥安全警示
+                            </div>
+                            <ul id="safetyAlertsList"></ul>
+                        </div>
+
+                        <!-- Toolbar: Search & Legend Strip -->
+                        <div class="med-toolbar">
+                            <div class="med-search-box">
+                                <i class="bi bi-search"></i>
+                                <input type="text" id="medSearchInput" class="form-input form-input-sm" placeholder="🔍 快速檢索學名、商品名、成分或劑量 (例: Norvasc, Amlodipine, 5mg, 慢箋)...">
+                            </div>
+                            <div class="med-legend-strip">
+                                <span class="legend-item"><span class="legend-box legend-consumed"></span> 處方已服天數</span>
+                                <span class="legend-item"><span class="legend-box legend-remains"></span> <strong>門診日餘藥量 (Drug Remains)</strong></span>
+                                <span class="legend-item"><span class="legend-line legend-current"></span> <strong>本次門診基準日 (Current Date)</strong></span>
+                                <span class="legend-item text-muted" id="medTimelineDateSpan">範圍: -- ~ --</span>
+                            </div>
+                        </div>
+
+                        <div class="card-body" id="medPanelBody" style="padding: 0; overflow: visible;">
+                            <!-- TIMELINE VIEW (PRIMARY) -->
+                            <div id="medTimelineWrapper" class="med-timeline-wrapper">
+                                <!-- Extra Top Scrollbar -->
+                                <div class="med-top-scroll-container" id="medTopScrollContainer">
+                                    <span class="med-top-scroll-label"><i class="bi bi-arrow-left-right"></i> 水平時序軸滑動</span>
+                                    <div class="med-top-scrollbar-track" id="medTopScrollTrack">
+                                        <div class="med-top-scrollbar-dummy" id="medTopScrollDummy"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Main Timeline Graph Matrix -->
+                                <div class="med-timeline-container" id="medTimelineContainer">
+                                    <div class="empty-state p-4 text-center">載入用藥時序中...</div>
+                                </div>
+                            </div>
+
+                            <!-- TRADITIONAL LIST VIEW (SECONDARY / ALTERNATIVE) -->
+                            <div id="medListWrapper" class="med-list-wrapper d-none p-3 scrollable" style="max-height: 1080px; overflow-y: auto;">
+                                <div class="medications-container" id="medicationsContainer">
+                                    <div class="empty-state">尚無用藥資料</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VIEW 3: Laboratory Trends & Drug Effect Timeline Correlation -->
+                <div id="workspaceCorrelation" class="workspace-pane d-none">
+                    <div class="card correlation-card">
+                        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                            <div class="card-title mb-0">
+                                <i class="bi bi-graph-up-arrow text-warning"></i>
+                                <span>藥物療效與檢驗時序對照分析 (Lab Trends & Drug Effect Timeline)</span>
+                                <span class="badge badge-meta" id="corrPlotStatusBadge">尚未繪製</span>
+                            </div>
+                            
+                            <!-- Quick Preset Buttons -->
+                            <div class="corr-preset-group d-flex flex-wrap gap-1">
+                                <span class="text-muted small align-self-center me-1"><i class="bi bi-magic"></i> 快速情境:</span>
+                                <button type="button" class="btn btn-xs btn-outline-primary" id="btnPresetGlucose" title="自動選取血糖 (Glucose AC / HbA1c) 與降血糖口服藥/胰島素">
+                                    🍬 血糖與降血糖藥
+                                </button>
+                                <button type="button" class="btn btn-xs btn-outline-primary" id="btnPresetRenal" title="自動選取腎功能 (eGFR / Creatinine) 與心血管/降壓藥物">
+                                    🫀 腎功能與降血壓藥
+                                </button>
+                                <button type="button" class="btn btn-xs btn-outline-primary" id="btnPresetAntithrombotic" title="自動選取血小板 (Platelet) 與抗血小板/抗凝血劑">
+                                    🩸 抗凝血與血小板
+                                </button>
+                                <button type="button" class="btn btn-xs btn-outline-primary" id="btnPresetLiver" title="自動選取肝膽功能 (AST / ALT / Bilirubin) 與相關藥物">
+                                    🫁 肝功能與相關用藥
+                                </button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary" id="btnPresetClear" title="清除所有勾選項">
+                                    🔄 清除選取
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Variable Selector Box (Checkboxes for Lab and Med items) -->
+                        <div class="card-body border-bottom p-3 corr-selector-body" id="corrSelectorBody">
+                            <div class="row g-3">
+                                <!-- COLUMN 1: Lab Analyte Selection Checkboxes -->
+                                <div class="col-md-6 border-end">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <strong class="text-primary"><i class="bi bi-eyedropper"></i> 1. 勾選欲對照之檢驗項目 (Laboratory Data)</strong>
+                                        <div class="btn-group btn-group-xs">
+                                            <button type="button" class="btn btn-outline-secondary btn-xs" id="btnSelectAllLabs">全選</button>
+                                            <button type="button" class="btn btn-outline-secondary btn-xs" id="btnClearLabs">清除</button>
+                                        </div>
+                                    </div>
+                                    <div class="mb-2">
+                                        <input type="text" id="corrLabSearchInput" class="form-input form-input-sm" placeholder="🔍 搜尋檢驗項目 (例: Glucose, eGFR, AST, Platelet)...">
+                                    </div>
+                                    <div class="corr-var-list-scrollable" id="corrLabListContainer" style="max-height: 220px; overflow-y: auto;">
+                                        <div class="empty-state small">載入檢驗項目中...</div>
+                                    </div>
+                                </div>
+
+                                <!-- COLUMN 2: Drug Selection Checkboxes -->
+                                <div class="col-md-6">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <strong class="text-success"><i class="bi bi-capsule"></i> 2. 勾選欲對照之用藥品項 (Medications)</strong>
+                                        <div class="btn-group btn-group-xs">
+                                            <button type="button" class="btn btn-outline-secondary btn-xs" id="btnSelectAllMeds">全選</button>
+                                            <button type="button" class="btn btn-outline-secondary btn-xs" id="btnClearMeds">清除</button>
+                                        </div>
+                                    </div>
+                                    <div class="mb-2">
+                                        <input type="text" id="corrMedSearchInput" class="form-input form-input-sm" placeholder="🔍 搜尋藥品或成分 (例: Repaglinide, Trajenta, Concor)...">
+                                    </div>
+                                    <div class="corr-var-list-scrollable" id="corrMedListContainer" style="max-height: 220px; overflow-y: auto;">
+                                        <div class="empty-state small">載入用藥清單中...</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Execution Action Bar -->
+                            <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
+                                <div class="corr-selected-stats small text-muted">
+                                    目前選取：<span class="badge badge-primary" id="selectedLabCountBadge">0 項檢驗</span> ＋ <span class="badge badge-success" id="selectedMedCountBadge">0 項用藥</span>
+                                </div>
+                                <div class="d-flex gap-2 align-items-center">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btnToggleSelectorCollapse" title="收合/展開勾選清單">
+                                        <i class="bi bi-chevron-up"></i> 收合選單
+                                    </button>
+                                    <button type="button" class="btn btn-primary btn-sm px-4 fw-bold" id="btnExecuteCorrelationPlot">
+                                        <i class="bi bi-play-circle-fill"></i> 執行繪圖 (Plot Correlation Timeline)
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Combined Timeline Plot Area -->
+                        <div class="card-body p-0 corr-plot-wrapper" id="corrPlotWrapper">
+                            <!-- Toolbar: Date Span & Legend -->
+                            <div class="med-toolbar border-bottom px-3 py-2">
+                                <div class="med-legend-strip">
+                                    <span class="legend-item"><span class="legend-box" style="background:#3b82f6;"></span> <strong>檢驗數值折線</strong></span>
+                                    <span class="legend-item"><span class="legend-box" style="background:rgba(16, 185, 129, 0.2); border:1px solid #10b981;"></span> 正常參考區間</span>
+                                    <span class="legend-item"><span class="legend-box legend-consumed"></span> 處方服用區間</span>
+                                    <span class="legend-item"><span class="legend-box legend-remains"></span> <strong>門診日餘藥量 (Drug Remains)</strong></span>
+                                    <span class="legend-item"><span class="legend-line legend-current"></span> <strong>本次門診基準日 (Current Date)</strong></span>
+                                </div>
+                                <span class="text-muted small" id="corrPlotDateSpan">範圍: -- ~ --</span>
+                            </div>
+
+                            <!-- Extra Top Scrollbar -->
+                            <div class="med-top-scroll-container" id="corrTopScrollContainer">
+                                <span class="med-top-scroll-label"><i class="bi bi-arrow-left-right"></i> 水平時序軸滑動</span>
+                                <div class="med-top-scrollbar-track" id="corrTopScrollTrack">
+                                    <div class="med-top-scrollbar-dummy" id="corrTopScrollDummy"></div>
+                                </div>
+                            </div>
+
+                            <!-- Main Scrollable Timeline Plot Table -->
+                            <div class="med-timeline-container corr-timeline-container" id="corrTimelineContainer" style="max-height: 1080px; min-height: 500px;">
+                                <div class="empty-state p-5 text-center">
+                                    <i class="bi bi-bezier2" style="font-size:36px; color:var(--brand-primary); opacity:0.6;"></i>
+                                    <p class="mt-2 fw-bold">尚未選取變數或執行繪圖</p>
+                                    <p class="text-muted small">請於上方勾選欲對照之檢驗項目（如 Glucose AC）與藥物（如 Trajenta、Repaglinide），或點選「🍬 血糖與降血糖藥」快速情境，再點擊「執行繪圖」。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Persistent Clinical Chat Box at the Bottom -->
+    <div class="clinical-chat-dock collapsed" id="clinicalChatDock">
+        <div class="chat-dock-header" id="chatDockHeader">
+            <div class="chat-header-title">
+                <i class="bi bi-chat-heart-fill"></i>
+                <span>門診臨床 AI 諮詢助理 (Clinical Co-Pilot)</span>
+                <span class="chat-patient-pill" id="chatPatientPill">病患: B100134889</span>
+            </div>
+            <div class="chat-header-actions">
+                <button class="chat-btn-action" id="clearChatBtn" title="清空對話紀錄">
+                    <i class="bi bi-trash3"></i> 清除
+                </button>
+                <button class="chat-btn-action" id="toggleChatBtn" title="展開/收合對話視窗">
+                    <i class="bi bi-chevron-up" id="toggleChatIcon"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="chat-dock-body" id="chatDockBody">
+            <!-- Quick Inquiry Prompt Chips -->
+            <div class="chat-quick-chips">
+                <span class="quick-chip-label"><i class="bi bi-lightning-charge-fill"></i> 快速提問:</span>
+                <button class="chat-chip" data-query="請總結此病患目前最主要的臨床風險與重大病史">🩺 主要臨床風險</button>
+                <button class="chat-chip" data-query="請檢視此病患現行用藥，是否存在腎功能(eGFR/Cr)劑量衝突或潛在交互作用？">💊 腎功能用藥安全檢視</button>
+                <button class="chat-chip" data-query="請總結最近一次影像與處置報告（如動靜脈瘻管PTA或胸部X光），條列病灶與器械尺寸">🩻 影像與病灶處置摘要</button>
+                <button class="chat-chip" data-query="此病患合併使用抗血小板/抗凝血劑(如Plavix, Cofarin)，請評估出血風險與監測重點">🩸 抗血栓與出血風險</button>
+                <button class="chat-chip" data-query="請以繁體中文整理今天門診需對此病患叮嚀的衛教與追蹤重點 (3點以內)">📝 門診衛教叮嚀重點</button>
+            </div>
+
+            <!-- Messages Stream -->
+            <div class="chat-messages-container" id="chatMessagesContainer">
+                <div class="chat-message assistant-message">
+                    <div class="message-avatar"><i class="bi bi-robot"></i></div>
+                    <div class="message-content">
+                        您好！我是您的<strong>門診臨床 AI 協同助理</strong>。我已即時同步此病患之雲端門診資料（含檢驗數值、影像報告病灶尺寸、現行處方與慢箋）。您可以隨時點選上方快捷標籤或直接提問！
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input Row -->
+            <div class="chat-input-row">
+                <input type="text" id="chatInput" placeholder="請輸入對此病患之病況、用藥、檢驗、影像或處置提問... (按 Enter 發送)" autocomplete="off">
+                <button id="sendChatBtn" class="btn btn-primary">
+                    <i class="bi bi-send-fill"></i> 發送
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: 1-Click EMR Pre-Consultation SOAP Note -->
+    <div class="modal-backdrop d-none" id="emrModal">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="bi bi-clipboard2-pulse"></i> 門診病歷預覽摘要 (OPD EMR Consultation Note)
+                </div>
+                <button class="modal-close-btn" id="closeEmrModalBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-hint">可直接點擊「複製摘要」按鈕，快速貼入醫院門診 EMR 系統之進度紀錄 (Progress Note) 中。</p>
+                <textarea id="emrNoteTextarea" class="emr-textarea" readonly></textarea>
+            </div>
+            <div class="modal-footer">
+                <span id="copySuccessMsg" class="copy-success-msg d-none">
+                    <i class="bi bi-check-circle-fill"></i> 已複製至剪貼簿！
+                </span>
+                <button id="copyEmrBtn" class="btn btn-primary">
+                    <i class="bi bi-clipboard-check"></i> 複製摘要至剪貼簿
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: AI Deep Extraction Viewer -->
+    <div class="modal-backdrop d-none" id="aiModal">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="bi bi-cpu"></i> AI server 深度臨床報告萃取
+                </div>
+                <button class="modal-close-btn" id="closeAiModalBtn">&times;</button>
+            </div>
+            <div class="modal-body" id="aiModalBody">
+                <div class="loading-spinner">
+                    <i class="bi bi-arrow-repeat spin"></i> AI server 正在進行深度語意解析...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Drug Photo & Appearance Viewer (Draggable & Expandable) -->
+    <div class="modal-backdrop drug-modal-backdrop d-none" id="drugPhotoModal">
+        <div class="modal-dialog drug-photo-dialog" id="drugPhotoModalDialog">
+            <div class="modal-header drug-modal-header" id="drugPhotoModalHeader" title="按住可拖曳移動此視窗至任意位置">
+                <div class="modal-title d-flex align-items-center gap-2">
+                    <i class="bi bi-arrows-move text-muted drag-handle-icon" title="按住可拖曳移動此視窗"></i>
+                    <i class="bi bi-capsule text-primary"></i> 
+                    <span id="drugPhotoModalTitle">藥品實體照片與辨識特徵</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="modal-action-btn" id="expandDrugPhotoModalBtn" title="放大/還原視窗寬度">
+                        <i class="bi bi-arrows-fullscreen"></i>
+                    </button>
+                    <button type="button" class="modal-close-btn" id="closeDrugPhotoModalBtn" title="關閉">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body drug-modal-body" id="drugPhotoModalBody">
+                <div class="loading-spinner" style="text-align:center; padding:24px;">
+                    <i class="bi bi-arrow-repeat spin" style="font-size:24px; color:var(--brand-primary);"></i>
+                    <p style="margin-top:10px; font-weight:600;">正在檢索藥品實體外觀圖資...</p>
+                </div>
+            </div>
+            <div class="modal-footer drug-modal-footer">
+                <div class="drag-hint-text">
+                    <i class="bi bi-arrows-move"></i> 可拖曳上方標題列移動視窗，避免遮擋病歷
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" id="closeDrugPhotoModalFooterBtn">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js?v=20261005s"></script>
+</body>
+</html>
