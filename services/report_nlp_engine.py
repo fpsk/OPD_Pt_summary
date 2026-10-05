@@ -1,33 +1,32 @@
 """
 Radiology & Narrative Clinical Report NLP Engine.
 Extracts main findings, lesions, dimensions, and devices deterministically,
-with optional deep synthesis via local LLM (RTX A6000).
+with optional deep synthesis via the local LLM (LM Studio).
 """
 
 import re
 import json
 import sqlite3
 import hashlib
-import urllib.request
+from contextlib import closing
 from typing import Dict, List, Any, Optional
 
 import config
-from patient_mcp_client import to_standard_date
+from services import llm_client
+from services.patient_mcp_client import to_standard_date
 
 # Initialize SQLite Cache for NLP & AI extractions
 def init_cache_db():
-    conn = sqlite3.connect(config.CACHE_DB_PATH)
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS nlp_report_cache (
-            report_hash TEXT PRIMARY KEY,
-            report_type TEXT,
-            result_json TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    conn.close()
+    with closing(sqlite3.connect(config.CACHE_DB_PATH)) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS nlp_report_cache (
+                report_hash TEXT PRIMARY KEY,
+                report_type TEXT,
+                result_json TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
 
 init_cache_db()
 
@@ -48,10 +47,6 @@ class ReportNlpEngine:
         r'\b(\d+)\s*Fr(?:\s+(?:introducer|catheter|sheath|double\s+lumen))?\b',
         re.IGNORECASE
     )
-    BALLOON_STENT_PATTERN = re.compile(
-        r'\b(?:Mustang|Terumo|balloon|stent|wire)\s*(\d+(?:\.\d+)?\s*(?:\*|x)\s*\d+(?:\.\d+)?\s*(?:mm|cm))\b',
-        re.IGNORECASE
-    )
     PRESSURE_ATM_PATTERN = re.compile(
         r'\b(\d+(?:\.\d+)?)\s*ATM\b',
         re.IGNORECASE
@@ -60,12 +55,6 @@ class ReportNlpEngine:
         r'(?:cadiothoracic|cardiothoracic)\s+ratio\s*(?:larger\s+than|greater\s+than|>|is)?\s*(?:half|50%|0\.\d+)',
         re.IGNORECASE
     )
-
-    # Negation indicators (NegEx-style)
-    NEGATION_WORDS = [
-        "no evidence of", "no active", "no acute", "negative for", "ruled out",
-        "without", "free of", "no audible murmur", "no rebound", "no tenderness"
-    ]
 
     # Clinical Keyword Categories
     FINDING_CATEGORIES = {
@@ -1029,26 +1018,37 @@ class ReportNlpEngine:
             "raw_summary": raw_val
         }
 
-    def extract_with_local_llm(self, text: str, modality: str = "") -> Optional[Dict[str, Any]]:
-        """
-        Deep clinical extraction utilizing local LLM on NVIDIA RTX A6000 (port 1234).
-        Caches result in SQLite for 0s repeat responses.
-        """
-        report_hash = hashlib.md5(text.encode("utf-8")).hexdigest()
-
-        # Check SQLite Cache first
+    @staticmethod
+    def _cache_get(report_hash: str) -> Optional[Dict[str, Any]]:
         try:
-            conn = sqlite3.connect(config.CACHE_DB_PATH)
-            cur = conn.cursor()
-            cur.execute("SELECT result_json FROM nlp_report_cache WHERE report_hash = ?", (report_hash,))
-            row = cur.fetchone()
-            conn.close()
-            if row:
-                return json.loads(row[0])
+            with closing(sqlite3.connect(config.CACHE_DB_PATH)) as conn:
+                row = conn.execute("SELECT result_json FROM nlp_report_cache WHERE report_hash = ?", (report_hash,)).fetchone()
+            return json.loads(row[0]) if row else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _cache_put(report_hash: str, modality: str, result: Dict[str, Any]) -> None:
+        try:
+            with closing(sqlite3.connect(config.CACHE_DB_PATH)) as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO nlp_report_cache (report_hash, report_type, result_json) VALUES (?, ?, ?)",
+                    (report_hash, modality, json.dumps(result, ensure_ascii=False))
+                )
+                conn.commit()
         except Exception:
             pass
 
-        # Build prompt for local LLM (LM Studio: openai/gpt-oss-20b)
+    def extract_with_local_llm(self, text: str, modality: str = "") -> Optional[Dict[str, Any]]:
+        """
+        Deep clinical extraction via the local LLM (LM Studio).
+        Caches result in SQLite for 0s repeat responses.
+        """
+        report_hash = hashlib.md5(text.encode("utf-8")).hexdigest()
+        cached = self._cache_get(report_hash)
+        if cached:
+            return cached
+
         system_prompt = (
             "You are an expert clinical informatics and radiology AI assistant. "
             "Analyze the medical report and extract: 1. Main diagnostic findings, "
@@ -1057,54 +1057,21 @@ class ReportNlpEngine:
             "'main_findings' (list of strings), 'measurements' (list of objects with site, size, description), "
             "'impression' (string), 'critical_alert' (string or null)."
         )
-
         user_content = f"Modality: {modality}\nReport Content:\n{text}\n\nReturn JSON only."
 
-        payload = {
-            "model": config.LOCAL_LLM_DEFAULT_MODEL,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content}
-            ],
-            "temperature": 0.1,
-            "max_tokens": 600
-        }
-
         try:
-            req_data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(
-                f"{config.LOCAL_LLM_HOST}/chat/completions",
-                data=req_data,
-                headers={"Content-Type": "application/json"}
+            content = llm_client.chat_completion(
+                [{"role": "system", "content": system_prompt},
+                 {"role": "user", "content": user_content}],
+                temperature=0.1, max_tokens=600, timeout=20,
             )
-            with urllib.request.urlopen(req, timeout=20) as resp:
-                resp_json = json.loads(resp.read().decode("utf-8"))
-                choice = resp_json.get("choices", [{}])[0]
-                msg_obj = choice.get("message", {})
-                content = (msg_obj.get("content") or "").strip()
-                if not content:
-                    content = (msg_obj.get("reasoning_content") or msg_obj.get("reasoning") or "").strip()
-                
-                # Extract JSON block
-                json_match = re.search(r'\{.*\}', content, re.DOTALL)
-                if json_match:
-                    parsed = json.loads(json_match.group(0))
-                else:
-                    parsed = {"impression": content, "main_findings": [], "measurements": []}
-
-                # Save to cache
-                try:
-                    conn = sqlite3.connect(config.CACHE_DB_PATH)
-                    cur = conn.cursor()
-                    cur.execute(
-                        "INSERT OR REPLACE INTO nlp_report_cache (report_hash, report_type, result_json) VALUES (?, ?, ?)",
-                        (report_hash, modality, json.dumps(parsed, ensure_ascii=False))
-                    )
-                    conn.commit()
-                    conn.close()
-                except Exception:
-                    pass
-
-                return parsed
+            json_match = re.search(r'\{.*\}', content, re.DOTALL)
+            if json_match:
+                parsed = json.loads(json_match.group(0))
+            else:
+                parsed = {"impression": content, "main_findings": [], "measurements": []}
         except Exception as e:
             return {"error": f"Local LLM extraction failed: {str(e)}", "impression": text[:200]}
+
+        self._cache_put(report_hash, modality, parsed)
+        return parsed

@@ -10,16 +10,14 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Tuple
 
 import config
-from patient_mcp_client import (
+from services.patient_mcp_client import (
     PatientMcpClient,
     roc_to_datetime,
-    datetime_to_roc,
     datetime_to_standard,
     to_standard_date,
-    to_roc_date,
     normalize_freq
 )
-from report_nlp_engine import ReportNlpEngine
+from services.report_nlp_engine import ReportNlpEngine
 
 
 def clean_lab_item_name(item: str, order: str) -> str:
@@ -834,7 +832,6 @@ class ClinicalSummaryEngine:
             # 14. Universal Reference Range Check for ANY lab item (flags out-of-range abnormal data)
             if entry["status_tag"] == "normal" and not entry["abnormal"]:
                 v_lower = val_str.lower()
-                r_lower = ref.lower()
                 if any(k in v_lower for k in ["陽性", "positive", "reactive", "(+)", "1+", "2+", "3+", "4+"]) and not any(k in v_lower for k in ["non-reactive", "negative", "陰性", "(-)"]):
                     entry["abnormal"] = True
                     entry["status_tag"] = "high"
@@ -2063,7 +2060,7 @@ class ClinicalSummaryEngine:
         """Format standardized EMR progress pre-consultation note with separated chronic/acute diagnoses."""
         badge_strs = [b["label"] for b in badges]
         lines = [
-            f"=== 門診病歷預覽摘要 (OPD Consultation Summary) ===",
+            "=== 門診病歷預覽摘要 (OPD Consultation Summary) ===",
             f"病患識別: {p_id} | 門診日期: {to_standard_date(clinic_date)}",
             f"臨床主要標記: {', '.join(badge_strs) if badge_strs else '無特定重大標記'}",
             "",

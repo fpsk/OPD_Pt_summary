@@ -5,16 +5,16 @@ and Outpatient Rosters in Cloud_Data.
 """
 
 import os
-import sys
 import re
 import csv
 import json
 import base64
 import zipfile
 import xml.etree.ElementTree as ET
+import urllib.error
 import urllib.request
 import urllib.parse
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Any, Optional
 
 import config
@@ -243,7 +243,7 @@ class PatientMcpClient:
                 try:
                     with open(p_path, "r", encoding=enc) as f:
                         reader = csv.reader(f)
-                        header = next(reader, None)
+                        next(reader, None)  # skip header row
                         for row in reader:
                             if len(row) >= 6:
                                 seq, name, gender, age, chart_no, pid = row[0].strip(), row[1].strip(), row[2].strip(), row[3].strip(), row[4].strip(), row[5].strip()
@@ -293,7 +293,7 @@ class PatientMcpClient:
                                         "age": row_vals[3].strip(),
                                         "chart_no": row_vals[4].strip(),
                                         "id_no": pid,
-                                        "source": f"Pt_ID_Table.xlsx"
+                                        "source": "Pt_ID_Table.xlsx"
                                     })
             except Exception:
                 pass
