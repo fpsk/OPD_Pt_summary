@@ -2,7 +2,7 @@ import os
 
 from flask import Blueprint, Response, jsonify, request
 
-from services import drug_photo_service
+from services import drug_photo_service, drug_safety_service
 
 bp = Blueprint("drugs", __name__, url_prefix="/api")
 
@@ -41,3 +41,9 @@ def get_drug_photo():
 def get_drug_info():
     """Return structured drug appearance details, NHI code, and photo URL."""
     return jsonify(drug_photo_service.get_drug_info_payload(_arg("code"), _arg("brand"), _arg("generic")))
+
+
+@bp.route("/drug_safety", methods=["GET"])
+def get_drug_safety():
+    """Return comprehensive clinical drug safety information (dosing, renal adjustment, side effects, contraindications, pregnancy warnings)."""
+    return jsonify(drug_safety_service.get_safety_profile(_arg("code"), _arg("brand"), _arg("generic")))

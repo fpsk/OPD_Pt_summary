@@ -20,7 +20,7 @@ export function renderMedications(meds) {
     if (totalMedCountEl) totalMedCountEl.textContent = totalCount;
 
     // Update 6-month count
-    const clinicDt = parseStandardDate(meds.timeline?.clinic_date || "2026/09/01") || new Date();
+    const clinicDt = parseStandardDate(meds.timeline?.clinic_date || "1150721") || new Date();
     const sixMonthsAgo = clinicDt.getTime() - (180 * 86400000);
     const sixMCount = (meds.timeline?.drugs || []).filter(d => {
         if (d.is_active_now) return true;
@@ -80,7 +80,7 @@ export function renderMedicationTimeline(timeline, filterMode, searchQuery) {
         return;
     }
 
-    const clinicDateStr = timeline.clinic_date || "2026/09/01";
+    const clinicDateStr = timeline.clinic_date || "1150721";
     const clinicDt = parseStandardDate(clinicDateStr) || new Date();
     const clinicTime = clinicDt.getTime();
 
@@ -375,6 +375,7 @@ export function renderMedicationTimeline(timeline, filterMode, searchQuery) {
             const epCodes = (d.episodes || []).map(ep => ep.nhicode).filter(Boolean);
             const primaryCode = epCodes[0] || '';
             const photoBtn = `<button type="button" class="med-photo-btn" data-brand="${escapeHtml(d.brand_name || brandDisplay)}" data-code="${escapeHtml(primaryCode)}" data-generic="${escapeHtml(genericDisplay)}" onclick="openDrugPhotoModalFromBtn(this, event)" title="查看藥品外觀照片"><i class="bi bi-card-image"></i></button>`;
+            const infoBtn = `<button type="button" class="med-info-btn" data-brand="${escapeHtml(d.brand_name || brandDisplay)}" data-code="${escapeHtml(primaryCode)}" data-generic="${escapeHtml(genericDisplay)}" onclick="openDrugSafetyModalFromBtn(this, event)" title="查看藥品臨床安全資訊 (安全劑量、腎功能調整、副作用、禁忌症、懷孕警語)"><i class="bi bi-info-circle"></i></button>`;
 
             tbodyHtml += `
                 <tr>
@@ -384,7 +385,7 @@ export function renderMedicationTimeline(timeline, filterMode, searchQuery) {
                             <span class="med-generic-text">${escapeHtml(genericDisplay)}</span>
                         </div>
                         <div class="med-meta-line">
-                            <span class="med-brand-name" title="${escapeHtml(d.brand_full || brandDisplay)}">${escapeHtml(brandDisplay)}</span>${photoBtn}
+                            <span class="med-brand-name" title="${escapeHtml(d.brand_full || brandDisplay)}">${escapeHtml(brandDisplay)}</span>${photoBtn}${infoBtn}
                             ${doseBadge}
                             ${freqBadge}
                             ${remainsPill}
@@ -514,12 +515,13 @@ export function renderMedicationList(meds, filterMode, searchQuery) {
             const doseText = m.dose ? `<span class="med-dose-badge" style="margin-left:6px;">${escapeHtml(m.dose)}</span>` : '';
 
             const photoBtn = `<button type="button" class="med-photo-btn" data-brand="${escapeHtml(brand)}" data-code="${escapeHtml(m.nhicode || '')}" data-generic="${escapeHtml(generic)}" onclick="openDrugPhotoModalFromBtn(this, event)" title="查看藥品外觀照片"><i class="bi bi-card-image"></i></button>`;
+            const infoBtn = `<button type="button" class="med-info-btn" data-brand="${escapeHtml(brand)}" data-code="${escapeHtml(m.nhicode || '')}" data-generic="${escapeHtml(generic)}" onclick="openDrugSafetyModalFromBtn(this, event)" title="查看藥品臨床安全資訊 (安全劑量、腎功能調整、副作用、禁忌症、懷孕警語)"><i class="bi bi-info-circle"></i></button>`;
 
             item.innerHTML = `
                 <div class="med-header-row">
                     <div class="med-title-block">
                         <div class="med-brand-row">
-                            <span class="med-brand-name">${escapeHtml(brand)}</span>${photoBtn}
+                            <span class="med-brand-name">${escapeHtml(brand)}</span>${photoBtn}${infoBtn}
                             ${doseText}
                         </div>
                         ${hasGeneric ? `

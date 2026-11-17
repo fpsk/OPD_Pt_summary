@@ -465,6 +465,48 @@ body {
     grid-template-columns: 1fr 2.5fr;
     gap: 16px;
     align-items: start;
+    transition: all 0.2s ease;
+}
+
+/* Full-Width / Collapsed Sidebar & Standalone Distinct Window Mode */
+body.sidebar-collapsed .col-problems,
+body.standalone-mode .col-problems {
+    display: none !important;
+}
+
+body.sidebar-collapsed .clinical-grid,
+body.standalone-mode .clinical-grid {
+    grid-template-columns: 1fr !important;
+}
+
+.standalone-badge {
+    display: none;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: rgba(2, 132, 199, 0.12);
+    color: var(--brand-primary);
+    border: 1px solid rgba(2, 132, 199, 0.25);
+}
+
+body.standalone-mode .standalone-badge {
+    display: inline-flex;
+}
+
+body.standalone-mode .btn-popout-window,
+body.standalone-mode .btn-toggle-sidebar,
+body.standalone-mode #topbarPopoutBtn {
+    display: none !important;
+}
+
+.btn-xs {
+    padding: 3px 8px;
+    font-size: 11.5px;
+    border-radius: 4px;
+    line-height: 1.35;
 }
 
 .clinical-col {
@@ -537,8 +579,26 @@ body {
     gap: 4px;
 }
 
+.workspace-labs-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.workspace-reports-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.workspace-reports-card .card-body.scrollable,
+#reportsContainer {
+    max-height: 1404px; /* 130% of previous 1080px */
+    overflow-y: auto;
+}
+
 .workspace-medications-card .card-body.scrollable {
-    max-height: 640px;
+    max-height: 832px; /* 130% of previous 640px */
 }
 
 .card {
@@ -581,7 +641,7 @@ body {
 }
 
 .card-body.scrollable {
-    max-height: 480px;
+    max-height: 624px; /* 130% of previous 480px */
     overflow-y: auto;
 }
 
@@ -954,7 +1014,7 @@ body.theme-dark .lab-flowsheet-container::-webkit-scrollbar-thumb {
 }
 
 .lab-flowsheet-container {
-    max-height: 720px; /* 1.5 times the previous 480px */
+    max-height: 1404px; /* 130% of previous 1080px */
     overflow: auto;
     border: 1px solid var(--border-color);
     border-top: none;
@@ -965,7 +1025,7 @@ body.theme-dark .lab-flowsheet-container::-webkit-scrollbar-thumb {
 }
 
 .lab-table-container {
-    max-height: 720px; /* 1.5 times for list view as well */
+    max-height: 1404px; /* 130% of previous 1080px */
     overflow-y: auto;
 }
 
@@ -1005,11 +1065,11 @@ body.theme-dark .lab-flowsheet-container::-webkit-scrollbar-thumb {
     left: 0;
     background-color: var(--bg-table-header) !important;
     z-index: 30 !important;
-    width: 250px;
-    min-width: 250px;
-    max-width: 250px;
+    width: 167px;
+    min-width: 167px;
+    max-width: 167px;
     text-align: left;
-    padding: 8px 12px;
+    padding: 8px 8px;
     border-right: 2px solid var(--border-color);
     border-bottom: 2px solid var(--border-color);
     box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
@@ -1045,10 +1105,10 @@ body.theme-dark .lab-flowsheet-container::-webkit-scrollbar-thumb {
     left: 0;
     background-color: var(--bg-surface) !important;
     z-index: 10 !important;
-    width: 250px;
-    min-width: 250px;
-    max-width: 250px;
-    padding: 7px 12px;
+    width: 167px;
+    min-width: 167px;
+    max-width: 167px;
+    padding: 7px 8px;
     border-right: 2px solid var(--border-color);
     border-bottom: 1px solid var(--border-color);
     box-shadow: 2px 0 5px rgba(0, 0, 0, 0.07);
@@ -1074,6 +1134,7 @@ body.theme-dark .lab-flowsheet-container::-webkit-scrollbar-thumb {
     font-family: var(--font-mono);
     margin-top: 2px;
     line-height: 1.25;
+    word-break: break-word;
 }
 
 /* 4. Physiological Group Section Headers (Spanning All Columns) - Solid Opaque */
@@ -1864,6 +1925,8 @@ body.theme-dark .val-text-low,
 
 .modal-body {
     padding: 16px 20px;
+    max-height: calc(88vh - 110px);
+    overflow-y: auto;
 }
 
 .modal-hint {
@@ -1874,7 +1937,7 @@ body.theme-dark .val-text-low,
 
 .emr-textarea {
     width: 100%;
-    height: 320px;
+    height: 416px; /* 130% of previous 320px */
     font-family: 'Consolas', 'Courier New', monospace;
     font-size: 13px;
     padding: 12px;
@@ -2466,8 +2529,8 @@ body.theme-dark .med-timeline-container::-webkit-scrollbar-thumb {
 }
 
 .med-timeline-container {
-    max-height: 1080px; /* 1.5X of 720px */
-    min-height: 600px;
+    max-height: 1404px; /* 130% of previous 1080px */
+    min-height: 780px; /* 130% of previous 600px */
     overflow: auto;
     border: 1px solid var(--border-color);
     border-top: none;
@@ -3236,6 +3299,417 @@ body.theme-dark .drug-modal-photo-viewport {
     color: var(--text-primary);
     word-break: break-word;
 }
+
+/* ==========================================================================
+   Clinical Drug Safety Information Button & Dialog Modal
+   ========================================================================== */
+.med-info-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-left: 3px;
+    padding: 0;
+    font-size: 11.5px;
+    color: #0284c7;
+    background: rgba(2, 132, 199, 0.08);
+    border: 1px solid rgba(2, 132, 199, 0.25);
+    border-radius: 4px;
+    cursor: pointer;
+    vertical-align: middle;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.med-info-btn:hover {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #0284c7;
+    transform: scale(1.12);
+    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);
+}
+
+body.theme-dark .med-info-btn {
+    background: rgba(56, 189, 248, 0.12);
+    border-color: rgba(56, 189, 248, 0.32);
+    color: #38bdf8;
+}
+
+body.theme-dark .med-info-btn:hover {
+    background: #0284c7;
+    color: #ffffff;
+}
+
+/* Drug Safety Movable Modal Dialog */
+.drug-safety-dialog {
+    position: fixed;
+    pointer-events: auto;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(255, 255, 255, 0.12);
+    width: 820px;
+    max-width: 95vw;
+    display: flex;
+    flex-direction: column;
+    z-index: 282;
+    overflow: hidden;
+    transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.22s ease;
+}
+
+.drug-safety-dialog.is-expanded {
+    width: 1160px !important;
+    max-width: 98vw !important;
+}
+
+.drug-safety-body {
+    padding: 16px 20px;
+    overflow-y: auto;
+    max-height: calc(88vh - 110px);
+}
+
+/* Header Identity Card */
+.drug-safety-header-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+}
+
+/* Black Box Warning Alert Banner */
+.safety-alert-banner {
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 14px;
+}
+
+.alert-boxed-warning {
+    background: rgba(220, 38, 38, 0.08);
+    border: 1.5px solid #ef4444;
+    color: #991b1b;
+}
+
+body.theme-dark .alert-boxed-warning {
+    background: rgba(239, 68, 68, 0.18);
+    border-color: #f87171;
+    color: #fca5a5;
+}
+
+.safety-banner-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 6px;
+}
+
+.safety-banner-content {
+    font-size: 12.5px;
+    line-height: 1.55;
+    white-space: pre-line;
+}
+
+/* 2-Column Responsive Grid */
+.safety-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+@media (max-width: 768px) {
+    .safety-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.safety-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.safety-card-header {
+    padding: 9px 13px;
+    font-size: 12.5px;
+    font-weight: 700;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.bg-card-dose {
+    background: rgba(16, 185, 129, 0.07);
+    border-left: 3px solid #10b981;
+}
+
+.bg-card-renal {
+    background: rgba(2, 132, 199, 0.07);
+    border-left: 3px solid #0284c7;
+}
+
+.bg-card-contra {
+    background: rgba(239, 68, 68, 0.07);
+    border-left: 3px solid #ef4444;
+}
+
+.bg-card-preg {
+    background: rgba(139, 92, 246, 0.07);
+    border-left: 3px solid #8b5cf6;
+}
+
+.bg-card-se {
+    background: rgba(245, 158, 11, 0.07);
+    border-left: 3px solid #f59e0b;
+}
+
+.bg-card-remarks {
+    background: rgba(6, 182, 212, 0.07);
+    border-left: 3px solid #06b6d4;
+}
+
+.safety-card-body {
+    padding: 12px 14px;
+    flex: 1;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Dose Stat Row */
+.dose-stat-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.dose-stat-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.dose-stat-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.dose-stat-val {
+    font-size: 13.5px;
+    font-weight: 700;
+    word-break: break-word;
+}
+
+.safety-timing-note {
+    background: rgba(2, 132, 199, 0.06);
+    border: 1px solid rgba(2, 132, 199, 0.18);
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 11.5px;
+    color: var(--text-primary);
+}
+
+.safety-titration-note {
+    background: rgba(16, 185, 129, 0.07);
+    border: 1px solid rgba(16, 185, 129, 0.22);
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 11.5px;
+    color: var(--text-primary);
+}
+
+.safety-narrative-summary {
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    background: var(--bg-card);
+    border-radius: 6px;
+    padding: 8px 10px;
+}
+
+/* Renal Adjustment */
+.dialysis-alert-strip {
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 11.5px;
+    color: #b91c1c;
+}
+
+body.theme-dark .dialysis-alert-strip {
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.15);
+}
+
+.renal-table {
+    font-size: 11px;
+    margin-bottom: 0;
+}
+
+.renal-table th {
+    font-weight: 600;
+    padding: 5px 8px;
+}
+
+.renal-table td {
+    padding: 5px 8px;
+    vertical-align: middle;
+}
+
+/* FDC Components Table */
+.fdc-comp-table {
+    font-size: 11px;
+    margin-bottom: 0;
+}
+
+.fdc-comp-table th {
+    font-weight: 600;
+    padding: 5px 8px;
+    background: var(--bg-card);
+}
+
+.fdc-comp-table td {
+    padding: 5px 8px;
+    vertical-align: middle;
+}
+
+.fdc-components-section {
+    background: rgba(2, 132, 199, 0.03);
+    border: 1px dashed rgba(2, 132, 199, 0.25);
+    border-radius: 6px;
+    padding: 8px 10px;
+}
+
+.hepatic-note {
+    background: var(--bg-card);
+    border-radius: 6px;
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+}
+
+/* Contraindications */
+.contra-list {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.contra-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    line-height: 1.45;
+    font-size: 11.5px;
+}
+
+.contra-bullet {
+    font-size: 12px;
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+/* Side Effects Chips */
+.chips-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.side-effect-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.25;
+}
+
+.chip-common {
+    background: rgba(2, 132, 199, 0.08);
+    color: #0369a1;
+    border: 1px solid rgba(2, 132, 199, 0.22);
+}
+
+body.theme-dark .chip-common {
+    background: rgba(56, 189, 248, 0.12);
+    color: #7dd3fc;
+    border-color: rgba(56, 189, 248, 0.25);
+}
+
+.chip-severe {
+    background: rgba(239, 68, 68, 0.1);
+    color: #b91c1c;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    font-weight: 600;
+}
+
+body.theme-dark .chip-severe {
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+.systems-se-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 10px;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.system-se-item {
+    font-size: 11px;
+    margin-bottom: 4px;
+    line-height: 1.4;
+}
+
+.system-se-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-right: 4px;
+}
+
+.system-se-terms {
+    color: var(--text-secondary);
+}
+
+/* DDIs */
+.ddi-list-box {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.ddi-card-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-left: 3px solid #f59e0b;
+    border-radius: 4px;
+    padding: 6px 9px;
+}
+
 
 
 

@@ -58,7 +58,7 @@ export async function sendChatMessage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 patient_id: state.currentPatientData.patient_id,
-                clinic_date: state.currentPatientData.clinic_date || "2026/09/01",
+                clinic_date: state.currentPatientData.clinic_date || "1150721",
                 message: query,
                 history: state.chatHistory.slice(-6)
             })

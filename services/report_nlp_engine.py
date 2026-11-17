@@ -1,7 +1,7 @@
 """
 Radiology & Narrative Clinical Report NLP Engine.
 Extracts main findings, lesions, dimensions, and devices deterministically,
-with optional deep synthesis via the local LLM (LM Studio).
+with optional deep synthesis via the LLM server (vLLM).
 """
 
 import re
@@ -1041,7 +1041,7 @@ class ReportNlpEngine:
 
     def extract_with_local_llm(self, text: str, modality: str = "") -> Optional[Dict[str, Any]]:
         """
-        Deep clinical extraction via the local LLM (LM Studio).
+        Deep clinical extraction via the LLM server (vLLM).
         Caches result in SQLite for 0s repeat responses.
         """
         report_hash = hashlib.md5(text.encode("utf-8")).hexdigest()

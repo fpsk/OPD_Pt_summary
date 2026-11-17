@@ -36,7 +36,7 @@ def chat():
     body, status = clinical_chat.answer(
         summary_engine,
         patient_id=(data.get("patient_id") or "").strip(),
-        clinic_date=(data.get("clinic_date") or "2026/09/01").strip(),
+        clinic_date=(data.get("clinic_date") or "1150721").strip(),
         user_query=user_query,
         history=data.get("history") or [],
         logger=logger,

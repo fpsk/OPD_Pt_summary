@@ -32,12 +32,16 @@ export function renderRadiologyReports(reports) {
     });
 
     const reportCountElem = document.getElementById("reportCount");
+    const topbarReportBadge = document.getElementById("topbarReportBadge");
+    const wsReportCount = document.getElementById("wsReportCount");
     const ctMriCountElem = document.getElementById("ctMriCount");
     const pathologyCountElem = document.getElementById("pathologyCount");
     const endoCountElem = document.getElementById("endoCount");
     const xrayCountElem = document.getElementById("xrayCount");
 
     if (reportCountElem) reportCountElem.textContent = totalCount;
+    if (topbarReportBadge) topbarReportBadge.textContent = totalCount;
+    if (wsReportCount) wsReportCount.textContent = totalCount;
     if (ctMriCountElem) ctMriCountElem.textContent = ctMriCount;
     if (pathologyCountElem) pathologyCountElem.textContent = pathologyCount;
     if (endoCountElem) endoCountElem.textContent = endoCount;

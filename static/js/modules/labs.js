@@ -298,10 +298,11 @@ export function renderLabFlowsheet(flowsheet, activeTab, filterText) {
             const tdItem = document.createElement("td");
             tdItem.className = "flowsheet-item-cell";
             const unitRefText = [it.unit, it.ref ? `Ref: ${it.ref}` : ''].filter(Boolean).join(" • ");
-            trItem.title = `${it.item} ${unitRefText ? `(${unitRefText})` : ''}`;
+            const rawRefNote = it.raw_ref && it.raw_ref !== it.ref ? ` | 原始標示: ${it.raw_ref}` : '';
+            trItem.title = `${it.item}${unitRefText ? ` (${unitRefText})` : ''}${rawRefNote}`;
             tdItem.innerHTML = `
                 <div class="flowsheet-item-name">${escapeHtml(it.item)}</div>
-                ${unitRefText ? `<div class="flowsheet-item-meta">${escapeHtml(unitRefText)}</div>` : ''}
+                ${unitRefText ? `<div class="flowsheet-item-meta" title="${escapeHtml(trItem.title)}">${escapeHtml(unitRefText)}</div>` : ''}
             `;
             trItem.appendChild(tdItem);
 

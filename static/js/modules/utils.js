@@ -85,6 +85,22 @@ export function formatShortDate(d) {
     return std.replace(/^20(\d{2})[\/\-]/, '$1/');
 }
 
+/**
+ * Format any date string into standard 7-digit ROC date (e.g. 2026/07/21 -> 1150721, 1150721 -> 1150721)
+ */
+export function formatRocDate(d) {
+    if (!d) return "1150721";
+    let s = String(d).trim();
+    if (/^\d{7}$/.test(s)) return s;
+    const std = formatStandardDate(s);
+    if (/^\d{4}\/\d{2}\/\d{2}$/.test(std)) {
+        const parts = std.split("/");
+        const rocYear = parseInt(parts[0], 10) - 1911;
+        return `${String(rocYear).padStart(3, "0")}${parts[1]}${parts[2]}`;
+    }
+    return s;
+}
+
 export function escapeHtml(str) {
     if (!str) return "";
     return String(str)

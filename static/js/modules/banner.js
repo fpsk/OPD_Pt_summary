@@ -9,22 +9,37 @@ export function renderPatientBanner(data) {
     const selectedOption = rosterSelect ? rosterSelect.options[rosterSelect.selectedIndex] : null;
 
     let name = prof.name ? prof.name : ("病患 " + data.patient_id);
-    let genderAge = (prof.gender || prof.age) ? `${prof.gender || ''} / ${prof.age || ''} 歲` : ("身分證號: " + data.patient_id);
+    let genderAge = (prof.gender || prof.age) ? `${prof.gender || '--'} / ${prof.age || '--'} 歲` : ("身分證號: " + data.patient_id);
     let chartNo = prof.chart_no ? ("病歷號: " + prof.chart_no) : ("門診日: " + formatStandardDate(data.clinic_date));
 
     if (selectedOption && selectedOption.value === data.patient_id) {
         const match = selectedOption.textContent.match(/^\d+\.\s*(.*?)\s*\((.*?)\)\s*-\s*(.*)$/);
         if (match) {
-            name = match[1] || name;
-            genderAge = match[2] || genderAge;
-            chartNo = "病歷號: " + (selectedOption.dataset.chartNo || prof.chart_no || "--");
+            if (!prof.name || prof.name.startsWith("門診病患")) {
+                name = match[1] || name;
+            }
+            if (!prof.age || prof.age === "--") {
+                genderAge = match[2] || genderAge;
+            }
+            const effectiveChartNo = (prof.chart_no && prof.chart_no !== "MCP-CLOUD")
+                ? prof.chart_no
+                : (selectedOption.dataset.chartNo || prof.chart_no || "--");
+            chartNo = "病歷號: " + effectiveChartNo;
         }
     }
 
-    document.getElementById("ptName").textContent = name;
-    document.getElementById("ptGenderAge").textContent = genderAge;
-    document.getElementById("ptChartNo").textContent = chartNo;
-    document.getElementById("ptIdNo").textContent = "ID: " + data.patient_id;
+    const ptNameEl = document.getElementById("ptName");
+    const ptGenderAgeEl = document.getElementById("ptGenderAge");
+    const ptChartNoEl = document.getElementById("ptChartNo");
+    const ptIdNoEl = document.getElementById("ptIdNo");
+
+    if (ptNameEl) ptNameEl.textContent = name;
+    if (ptGenderAgeEl) {
+        ptGenderAgeEl.textContent = genderAge;
+        ptGenderAgeEl.title = prof.birth_date ? `民國出生日期: ${prof.birth_date}` : "";
+    }
+    if (ptChartNoEl) ptChartNoEl.textContent = chartNo;
+    if (ptIdNoEl) ptIdNoEl.textContent = "ID: " + data.patient_id;
 
     // Update Chat Patient Pill
     const chatPill = document.getElementById("chatPatientPill");

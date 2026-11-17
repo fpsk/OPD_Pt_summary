@@ -79,7 +79,11 @@ class DrugPhotoService:
                     len(self.disk_stem_map), len(self.zip_stem_map))
 
     def _get_db_conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(DB_PATH, timeout=5)
+        db_uri = f"file:{os.path.abspath(DB_PATH).replace(os.sep, '/')}?immutable=1"
+        try:
+            conn = sqlite3.connect(db_uri, uri=True, timeout=5)
+        except Exception:
+            conn = sqlite3.connect(DB_PATH, timeout=5)
         conn.row_factory = sqlite3.Row
         return conn
 

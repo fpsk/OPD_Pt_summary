@@ -1,5 +1,5 @@
 """
-Shared client for the local OpenAI-compatible LLM server (LM Studio).
+Shared client for the OpenAI-compatible LLM server (vLLM).
 
 Every LLM call in the app goes through `chat_completion` so model, host,
 timeouts and response parsing are configured in exactly one place.
@@ -13,7 +13,7 @@ import config
 
 
 class LlmError(RuntimeError):
-    """Raised when the local LLM is unreachable or returns no usable text."""
+    """Raised when the LLM is unreachable or returns no usable text."""
 
 
 def chat_completion(
@@ -60,3 +60,17 @@ def is_online(timeout: float = 2) -> bool:
             return resp.status == 200
     except Exception:
         return False
+
+
+def get_model_name(timeout: float = 2) -> str:
+    """Query /models to extract the active model name, or fallback to default."""
+    try:
+        with urllib.request.urlopen(f"{config.LOCAL_LLM_HOST}/models", timeout=timeout) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                models = data.get("data", [])
+                if models and "id" in models[0]:
+                    return models[0]["id"]
+    except Exception:
+        pass
+    return config.LOCAL_LLM_DEFAULT_MODEL

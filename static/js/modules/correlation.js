@@ -265,7 +265,7 @@ export function renderCorrelationPlot() {
         return;
     }
 
-    const clinicDateStr = state.currentPatientData.clinic_date || "2026/09/01";
+    const clinicDateStr = state.currentPatientData.clinic_date || "1150721";
     const clinicDt = parseStandardDate(clinicDateStr) || new Date();
     const clinicTime = clinicDt.getTime();
 

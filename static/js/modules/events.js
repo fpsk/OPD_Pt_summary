@@ -2,6 +2,7 @@
  * Wires all static DOM event listeners (tabs, toggles, filters, modals, chat).
  */
 import { state } from "./state.js";
+import { formatRocDate } from "./utils.js";
 import { clearChatHistory, sendChatMessage, toggleChatDock } from "./chat.js";
 import { applyCorrelationPreset, renderCorrelationPlot, setAllCorrCheckboxes } from "./correlation.js";
 import { closeDrugPhotoModal, initDrugModalDraggable, toggleDrugModalExpand } from "./drug-photo.js";
@@ -19,32 +20,54 @@ export function setupEventListeners() {
         rosterSelect.addEventListener("change", (e) => {
             const pid = e.target.value;
             if (pid) {
+                state.userInitiatedReview = true;
                 document.getElementById("patientIdInput").value = pid;
-                const date = document.getElementById("clinicDateInput").value.trim() || "2026/09/01";
+                const selOpt = e.target.selectedOptions && e.target.selectedOptions[0];
+                const optDate = selOpt?.dataset?.clinicDate;
+                const rawDate = optDate || document.getElementById("clinicDateInput")?.value?.trim() || state.lastQueryDate || "1150721";
+                const date = formatRocDate(rawDate);
+                const dateEl = document.getElementById("clinicDateInput");
+                if (dateEl) dateEl.value = date;
+                state.lastQueryDate = date;
+                try { localStorage.setItem("opd_last_query_date", date); } catch (err) {}
                 loadPatientSummary(pid, date);
             }
         });
     }
 
-    // Search button
-    document.getElementById("searchBtn").addEventListener("click", () => {
-        const pid = document.getElementById("patientIdInput").value.trim();
-        const date = document.getElementById("clinicDateInput").value.trim() || "2026/09/01";
-        if (pid) {
-            loadPatientSummary(pid, date);
-        }
-    });
+    // Search button & inputs
+    const searchBtn = document.getElementById("searchBtn");
+    const patientIdInput = document.getElementById("patientIdInput");
+    const clinicDateInput = document.getElementById("clinicDateInput");
 
-    // Enter key triggers search
-    document.getElementById("patientIdInput").addEventListener("keypress", (e) => {
-        if (e.key === "Enter") document.getElementById("searchBtn").click();
-    });
-    document.getElementById("clinicDateInput").addEventListener("keypress", (e) => {
-        if (e.key === "Enter") document.getElementById("searchBtn").click();
-    });
+    if (searchBtn && patientIdInput && clinicDateInput) {
+        searchBtn.addEventListener("click", () => {
+            const pid = patientIdInput.value.trim();
+            const rawDate = clinicDateInput.value.trim() || state.lastQueryDate || "1150721";
+            const date = formatRocDate(rawDate);
+            clinicDateInput.value = date;
+            state.lastQueryDate = date;
+            try { localStorage.setItem("opd_last_query_date", date); } catch (err) {}
+            if (pid) {
+                state.userInitiatedReview = true;
+                loadPatientSummary(pid, date);
+            }
+        });
+
+        // Enter key triggers search
+        patientIdInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") searchBtn.click();
+        });
+        clinicDateInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") searchBtn.click();
+        });
+    }
 
     // Theme toggle
-    document.getElementById("themeToggleBtn").addEventListener("click", toggleTheme);
+    const themeToggleBtn = document.getElementById("themeToggleBtn");
+    if (themeToggleBtn) {
+        themeToggleBtn.addEventListener("click", toggleTheme);
+    }
 
     // Lab tabs (6 Physiological Systems + All)
     document.querySelectorAll("#labTabs .tab-btn").forEach(btn => {
@@ -157,20 +180,74 @@ export function setupEventListeners() {
         }
     }
 
-    // Workspace Switching (Reports vs Medications vs Correlation)
+    // Workspace Switching (Labs vs Reports vs Medications vs Correlation)
+    const topChoiceLabs = document.getElementById("topbarChoiceLabs");
     const topChoiceReports = document.getElementById("topbarChoiceReports");
     const topChoiceMeds = document.getElementById("topbarChoiceMeds");
     const topChoiceCorr = document.getElementById("topbarChoiceCorrelation");
+
+    const wsChoiceLabs = document.getElementById("wsChoiceLabs");
     const wsChoiceReports = document.getElementById("wsChoiceReports");
     const wsChoiceMeds = document.getElementById("wsChoiceMeds");
     const wsChoiceCorr = document.getElementById("wsChoiceCorrelation");
 
+    if (topChoiceLabs) topChoiceLabs.addEventListener("click", () => switchWorkspaceView("labs"));
     if (topChoiceReports) topChoiceReports.addEventListener("click", () => switchWorkspaceView("reports"));
     if (topChoiceMeds) topChoiceMeds.addEventListener("click", () => switchWorkspaceView("medications"));
     if (topChoiceCorr) topChoiceCorr.addEventListener("click", () => switchWorkspaceView("correlation"));
+
+    if (wsChoiceLabs) wsChoiceLabs.addEventListener("click", () => switchWorkspaceView("labs"));
     if (wsChoiceReports) wsChoiceReports.addEventListener("click", () => switchWorkspaceView("reports"));
     if (wsChoiceMeds) wsChoiceMeds.addEventListener("click", () => switchWorkspaceView("medications"));
     if (wsChoiceCorr) wsChoiceCorr.addEventListener("click", () => switchWorkspaceView("correlation"));
+
+    // Sidebar Toggle (Full-Width View Mode)
+    const btnToggleSidebar = document.getElementById("btnToggleSidebar");
+    if (btnToggleSidebar) {
+        btnToggleSidebar.addEventListener("click", () => {
+            const isCollapsed = document.body.classList.toggle("sidebar-collapsed");
+            const btnText = document.getElementById("btnToggleSidebarText");
+            const ind = document.getElementById("workspaceIndicatorText");
+            if (isCollapsed) {
+                if (btnText) btnText.textContent = "還原側邊欄";
+                btnToggleSidebar.innerHTML = '<i class="bi bi-layout-sidebar"></i> <span id="btnToggleSidebarText">還原側邊欄</span>';
+                btnToggleSidebar.title = "展開問題清單側邊欄";
+                if (ind) ind.innerHTML = '<i class="bi bi-arrows-fullscreen text-primary"></i> 全寬檢視 (100% 版面)';
+            } else {
+                if (btnText) btnText.textContent = "全寬模式 (無側邊欄)";
+                btnToggleSidebar.innerHTML = '<i class="bi bi-layout-sidebar-inset"></i> <span id="btnToggleSidebarText">全寬模式 (無側邊欄)</span>';
+                btnToggleSidebar.title = "收合側邊欄以擴展檢驗與用藥至全螢幕寬度";
+                if (ind) ind.innerHTML = '<i class="bi bi-layout-split"></i> 主要工作區 (2.5/3.5 版面)';
+            }
+        });
+    }
+
+    // Distinct Popout Window (No Sidebar)
+    const openPopout = () => {
+        const currentPid = document.getElementById("patientSelector")?.value || "B100134889";
+        const rawDt = document.getElementById("clinicDateInput")?.value?.trim() || "1150721";
+        const currentDt = formatRocDate(rawDt);
+        const currentView = state.currentWorkspaceView || "labs";
+        const url = `/?patient=${encodeURIComponent(currentPid)}&date=${encodeURIComponent(currentDt)}&view=${encodeURIComponent(currentView)}&standalone=1`;
+        const popHeight = 1248; // 130% of previous 960px
+        const win = window.open(
+            url,
+            `DistinctLabMed_${currentPid}`,
+            `width=1650,height=${popHeight},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`
+        );
+        if (win) {
+            win.focus();
+        }
+    };
+
+    const btnPopoutWindow = document.getElementById("btnPopoutWindow");
+    if (btnPopoutWindow) {
+        btnPopoutWindow.addEventListener("click", openPopout);
+    }
+    const topbarPopoutBtn = document.getElementById("topbarPopoutBtn");
+    if (topbarPopoutBtn) {
+        topbarPopoutBtn.addEventListener("click", openPopout);
+    }
 
     // Imaging tabs (All vs CT/MRI vs Endoscopy/PTA vs X-ray/Sono)
     document.querySelectorAll("#imagingTabs .tab-btn").forEach(btn => {
@@ -386,29 +463,52 @@ export function setupEventListeners() {
     }
 
     // EMR Note Modal
-    document.getElementById("openEmrNoteBtn").addEventListener("click", () => {
-        if (!state.currentPatientData) return;
-        document.getElementById("emrNoteTextarea").value = state.currentPatientData.emr_preconsult_note || "";
-        document.getElementById("copySuccessMsg").classList.add("d-none");
-        document.getElementById("emrModal").classList.remove("d-none");
-    });
-    document.getElementById("closeEmrModalBtn").addEventListener("click", () => {
-        document.getElementById("emrModal").classList.add("d-none");
-    });
-    document.getElementById("copyEmrBtn").addEventListener("click", () => {
-        const text = document.getElementById("emrNoteTextarea").value;
-        navigator.clipboard.writeText(text).then(() => {
-            document.getElementById("copySuccessMsg").classList.remove("d-none");
-            setTimeout(() => {
-                document.getElementById("copySuccessMsg").classList.add("d-none");
-            }, 3000);
+    const openEmrNoteBtn = document.getElementById("openEmrNoteBtn");
+    if (openEmrNoteBtn) {
+        openEmrNoteBtn.addEventListener("click", () => {
+            if (!state.currentPatientData) return;
+            const emrTextarea = document.getElementById("emrNoteTextarea");
+            if (emrTextarea) emrTextarea.value = state.currentPatientData.emr_preconsult_note || "";
+            const copyMsg = document.getElementById("copySuccessMsg");
+            if (copyMsg) copyMsg.classList.add("d-none");
+            const emrModal = document.getElementById("emrModal");
+            if (emrModal) emrModal.classList.remove("d-none");
         });
-    });
+    }
+
+    const closeEmrModalBtn = document.getElementById("closeEmrModalBtn");
+    if (closeEmrModalBtn) {
+        closeEmrModalBtn.addEventListener("click", () => {
+            const emrModal = document.getElementById("emrModal");
+            if (emrModal) emrModal.classList.add("d-none");
+        });
+    }
+
+    const copyEmrBtn = document.getElementById("copyEmrBtn");
+    if (copyEmrBtn) {
+        copyEmrBtn.addEventListener("click", () => {
+            const emrTextarea = document.getElementById("emrNoteTextarea");
+            const text = emrTextarea ? emrTextarea.value : "";
+            navigator.clipboard.writeText(text).then(() => {
+                const copyMsg = document.getElementById("copySuccessMsg");
+                if (copyMsg) {
+                    copyMsg.classList.remove("d-none");
+                    setTimeout(() => {
+                        copyMsg.classList.add("d-none");
+                    }, 3000);
+                }
+            });
+        });
+    }
 
     // AI Modal close
-    document.getElementById("closeAiModalBtn").addEventListener("click", () => {
-        document.getElementById("aiModal").classList.add("d-none");
-    });
+    const closeAiModalBtn = document.getElementById("closeAiModalBtn");
+    if (closeAiModalBtn) {
+        closeAiModalBtn.addEventListener("click", () => {
+            const aiModal = document.getElementById("aiModal");
+            if (aiModal) aiModal.classList.add("d-none");
+        });
+    }
 
     // Drug Photo Modal close & controls
     const closeDrugBtn = document.getElementById("closeDrugPhotoModalBtn");

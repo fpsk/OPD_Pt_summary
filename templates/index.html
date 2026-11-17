@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <link rel="stylesheet" href="/static/css/styles.css?v=20261005q">
+    <link rel="stylesheet" href="/static/css/styles.css?v=20261102a">
 </head>
 <body class="theme-light">
     <!-- Top Navigation & Control Bar -->
@@ -29,24 +29,28 @@
             <div class="search-box-group">
                 <div class="input-with-icon">
                     <i class="bi bi-search"></i>
-                    <input type="text" id="patientIdInput" placeholder="身分證號 / 病歷號 (例: B100134889)" value="B100134889">
+                    <input type="text" id="patientIdInput" placeholder="身分證號 / 病歷號 (例: B100134889)" value="{{ default_patient_id or 'B100134889' }}">
                 </div>
                 <div class="date-with-icon">
                     <i class="bi bi-calendar3"></i>
-                    <input type="text" id="clinicDateInput" placeholder="門診日 (2026/09/01)" value="2026/09/01" title="門診日期 (YYYY/MM/DD 或 民國日)">
+                    <input type="text" id="clinicDateInput" placeholder="門診日 (例: 1150721)" value="{{ default_date or '1150721' }}" title="門診日期 (民國年 7 碼，例: 1150721 或 YYYY/MM/DD)">
                 </div>
                 <button id="searchBtn" class="btn btn-primary">
                     <i class="bi bi-arrow-clockwise"></i> 查詢摘要
                 </button>
             </div>
 
-            <!-- Top Bar Choice: Reports vs Medications vs Correlation (Main Workspace) -->
+            <!-- Top Bar Choice: Labs vs Reports vs Medications vs Correlation (Main Workspace) -->
             <div class="topbar-choice-group" id="topbarChoiceGroup" role="tablist">
-                <button type="button" class="topbar-choice-btn active" id="topbarChoiceReports" title="顯示檢驗與影像病理報告 (主要工作區)">
-                    <i class="bi bi-file-earmark-medical"></i> 檢驗與影像報告
+                <button type="button" class="topbar-choice-btn active" id="topbarChoiceLabs" title="顯示檢驗報告與時序趨勢 (主要工作區)">
+                    <i class="bi bi-eyedropper text-warning"></i> 檢驗報告
+                </button>
+                <button type="button" class="topbar-choice-btn" id="topbarChoiceReports" title="顯示影像、處置與病理報告 (主要工作區)">
+                    <i class="bi bi-journal-medical text-danger"></i> 影像與病理
+                    <span class="badge badge-count" id="topbarReportBadge">0</span>
                 </button>
                 <button type="button" class="topbar-choice-btn" id="topbarChoiceMeds" title="顯示目前處方與用藥 (主要工作區)">
-                    <i class="bi bi-capsule"></i> 目前用藥
+                    <i class="bi bi-capsule text-success"></i> 目前用藥
                     <span class="badge badge-count" id="topbarMedBadge">0</span>
                 </button>
                 <button type="button" class="topbar-choice-btn" id="topbarChoiceCorrelation" title="顯示藥效與檢驗時序對照分析 (主要工作區)">
@@ -61,10 +65,17 @@
                 <span class="dot dot-success"></span>
                 <span>MCP Cloud</span>
             </div>
-            <div class="status-indicator-badge" id="aiStatusBadge" title="AI server (LM Studio: openai/gpt-oss-20b)">
+            <div class="status-indicator-badge" id="sseStatusBadge" title="Push-based Patient Launch (SSE)">
+                <span class="dot" id="sseStatusDot" style="background:#94a3b8;"></span>
+                <span id="sseStatusText">Push: 連線中...</span>
+            </div>
+            <div class="status-indicator-badge" id="aiStatusBadge" title="AI server (vLLM: gpt-oss-120b)">
                 <span class="dot dot-success"></span>
                 <span>AI server</span>
             </div>
+            <button id="topbarPopoutBtn" class="theme-btn" title="在獨立全寬新視窗中開啟檢驗與用藥 (無側邊欄)">
+                <i class="bi bi-box-arrow-up-right"></i>
+            </button>
             <button id="themeToggleBtn" class="theme-btn" title="切換深淺模式">
                 <i class="bi bi-moon-stars"></i>
             </button>
@@ -180,10 +191,13 @@
             <!-- COLUMN 2 (2.5/3.5 of display): Main Workspace (Reports vs Medications) -->
             <div class="clinical-col col-main-workspace" id="colMainWorkspace">
                 <!-- Workspace Sub-navigation / Mode Switcher -->
-                <div class="workspace-nav-bar d-flex justify-content-between align-items-center mb-2">
+                <div class="workspace-nav-bar d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                     <div class="btn-group workspace-tab-group" role="tablist">
-                        <button type="button" class="btn btn-sm btn-workspace active" id="wsChoiceReports">
-                            <i class="bi bi-file-earmark-medical text-primary"></i> 檢驗與影像病理報告 (Reports)
+                        <button type="button" class="btn btn-sm btn-workspace active" id="wsChoiceLabs">
+                            <i class="bi bi-eyedropper text-warning"></i> 檢驗報告 (Labs)
+                        </button>
+                        <button type="button" class="btn btn-sm btn-workspace" id="wsChoiceReports">
+                            <i class="bi bi-journal-medical text-danger"></i> 影像與病理報告 (Reports) (<span id="wsReportCount">0</span>)
                         </button>
                         <button type="button" class="btn btn-sm btn-workspace" id="wsChoiceMeds">
                             <i class="bi bi-capsule text-success"></i> 目前處方與用藥 (Medications) (<span id="wsMedCount">0</span>)
@@ -192,15 +206,26 @@
                             <i class="bi bi-graph-up-arrow text-warning"></i> 藥效與檢驗時序對照 (Lab & Drug Effect)
                         </button>
                     </div>
-                    <div class="workspace-indicator-text text-muted small">
-                        <i class="bi bi-layout-split"></i> 主要工作區 (2.5/3.5 版面)
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="workspace-indicator-text text-muted small" id="workspaceIndicatorText">
+                            <i class="bi bi-layout-split"></i> 主要工作區 (2.5/3.5 版面)
+                        </div>
+                        <span class="standalone-badge" id="standaloneBadge">
+                            <i class="bi bi-arrows-fullscreen"></i> 獨立全寬檢視
+                        </span>
+                        <button type="button" class="btn btn-xs btn-outline-secondary btn-toggle-sidebar" id="btnToggleSidebar" title="收合或展開側邊欄以擴展檢驗與用藥至全螢幕寬度">
+                            <i class="bi bi-layout-sidebar-inset"></i> <span id="btnToggleSidebarText">全寬模式 (無側邊欄)</span>
+                        </button>
+                        <button type="button" class="btn btn-xs btn-outline-primary btn-popout-window" id="btnPopoutWindow" title="在獨立新視窗中開啟檢驗與用藥檢視 (無側邊欄)">
+                            <i class="bi bi-box-arrow-up-right"></i> 獨立視窗
+                        </button>
                     </div>
                 </div>
 
-                <!-- VIEW 1: Objective Findings (Labs & Narrative Radiology/Pathology) -->
-                <div id="workspaceReports" class="workspace-pane">
+                <!-- VIEW 1: Objective Findings - Laboratory Reports & Trends -->
+                <div id="workspaceLabs" class="workspace-pane">
                     <!-- Lab Panel -->
-                    <div class="card">
+                    <div class="card workspace-labs-card">
                         <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                             <div class="card-title mb-0">
                                 <i class="bi bi-eyedropper text-warning"></i>
@@ -326,9 +351,11 @@
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Narrative Radiology, Procedure & Pathology Reports -->
-                    <div class="card mt-3">
+                <!-- VIEW 2: Narrative Radiology, Procedure & Pathology Reports -->
+                <div id="workspaceReports" class="workspace-pane d-none">
+                    <div class="card workspace-reports-card">
                         <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                             <div class="card-title mb-0">
                                 <i class="bi bi-journal-medical text-danger"></i>
@@ -336,7 +363,7 @@
                             </div>
                             <div class="imaging-filter-group" id="imagingTabs">
                                 <button class="tab-btn active" data-tab="all" id="tabImgAll">全部 (<span id="reportCount">0</span>)</button>
-                                <button class="tab-btn" data-tab="ct_mri" id="tabImgCtMri">⚡ CT / MRI (<span id="ctMriCount">0</span>)</button>
+                                <button class="tab-btn" data-tab="ct_mri" id="tabImgCtMri">??CT / MRI (<span id="ctMriCount">0</span>)</button>
                                 <button class="tab-btn" data-tab="pathology" id="tabImgPathology">🔬 病理報告 (Pathology) (<span id="pathologyCount">0</span>)</button>
                                 <button class="tab-btn" data-tab="endoscopy_pta" id="tabImgEndo">內視鏡/處置 (<span id="endoCount">0</span>)</button>
                                 <button class="tab-btn" data-tab="xray_sono" id="tabImgXray">X光/超音波 (<span id="xrayCount">0</span>)</button>
@@ -348,7 +375,7 @@
                     </div>
                 </div>
 
-                <!-- VIEW 2: Current Medications & Chronic Refills (Occupies 2/3 when toggled) -->
+                <!-- VIEW 3: Current Medications & Chronic Refills (Occupies 2/3 when toggled) -->
                 <div id="workspaceMedications" class="workspace-pane d-none">
                     <div class="card workspace-medications-card">
                         <div class="card-header">
@@ -677,6 +704,62 @@
         </div>
     </div>
 
-    <script type="module" src="/static/js/main.js?v=20261005t"></script>
+    <!-- Modal: Drug Clinical Safety Information (Draggable & Expandable) -->
+    <div class="modal-backdrop drug-modal-backdrop d-none" id="drugSafetyModal">
+        <div class="modal-dialog drug-safety-dialog" id="drugSafetyModalDialog">
+            <div class="modal-header drug-modal-header drug-safety-header" id="drugSafetyModalHeader" title="按住可拖曳移動此視窗至任意位置">
+                <div class="modal-title d-flex align-items-center gap-2">
+                    <i class="bi bi-arrows-move text-muted drag-handle-icon" title="按住可拖曳移動此視窗"></i>
+                    <i class="bi bi-shield-check text-info"></i> 
+                    <span id="drugSafetyModalTitle">藥品臨床安全與處方指引</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="modal-action-btn" id="expandDrugSafetyModalBtn" title="放大/還原視窗寬度">
+                        <i class="bi bi-arrows-fullscreen"></i>
+                    </button>
+                    <button type="button" class="modal-close-btn" id="closeDrugSafetyModalBtn" title="關閉">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body drug-modal-body drug-safety-body" id="drugSafetyModalBody">
+                <div class="loading-spinner" style="text-align:center; padding:28px;">
+                    <i class="bi bi-arrow-repeat spin" style="font-size:24px; color:#0284c7;"></i>
+                    <p style="margin-top:10px; font-weight:600;">正在檢索藥品臨床安全處方指引...</p>
+                </div>
+            </div>
+            <div class="modal-footer drug-modal-footer">
+                <div class="drag-hint-text">
+                    <i class="bi bi-arrows-move"></i> 可拖曳上方標題列移動視窗，避免遮擋病歷
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" id="closeDrugSafetyModalFooterBtn">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SSE Push Patient Launch Non-blocking Prompt Modal/Toast -->
+    <div id="sseLaunchPrompt" style="display: none; position: fixed; top: 24px; right: 24px; z-index: 99999; max-width: 440px; background: rgba(15, 23, 42, 0.96); backdrop-filter: blur(12px); border: 1px solid #38bdf8; border-radius: 12px; box-shadow: 0 12px 36px rgba(0,0,0,0.55); padding: 16px 20px;">
+        <div style="display: flex; align-items: flex-start; gap: 12px;">
+            <div style="font-size: 1.5rem; color: #38bdf8; margin-top: 2px;">
+                <i class="bi bi-bell-fill"></i>
+            </div>
+            <div style="flex: 1;">
+                <div style="font-weight: 700; font-size: 0.96rem; color: #f8fafc; margin-bottom: 4px;">
+                    收到新病患推送通知 (New patient received)
+                </div>
+                <div id="sseLaunchPromptText" style="font-size: 0.85rem; color: #cbd5e1; margin-bottom: 12px; line-height: 1.45;">
+                    外部系統通知載入新病患，是否立即載入？ (New patient received: load?)
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" id="btnDismissLaunchPrompt" class="btn btn-secondary btn-sm" style="padding: 6px 14px; font-size: 0.82rem; cursor: pointer;">
+                        保留目前審查 (Keep)
+                    </button>
+                    <button type="button" id="btnAcceptLaunchPrompt" class="btn btn-primary btn-sm" style="padding: 6px 14px; font-size: 0.82rem; font-weight: 700; cursor: pointer;">
+                        <i class="bi bi-arrow-down-circle"></i> 立即載入 (Load)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/static/js/main.js?v=20261117a"></script>
 </body>
 </html>

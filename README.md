@@ -69,21 +69,41 @@ d:/Antigravity_workspace/Summaries/
 ├── config.py                       # Settings; secrets loaded from .env
 ├── .env.example                    # Template for required environment variables
 ├── services/                       # Backend logic (no Flask imports)
-│   ├── __init__.py                 # Shared singletons (summary/NLP engines, MCP client, photos)
+│   ├── __init__.py                 # Shared singletons and service class exports
 │   ├── patient_mcp_client.py       # REST API, OMOP DB & Cloud_Data roster loader
-│   ├── clinical_summary_engine.py  # Multi-domain clinical synthesis & EMR note generator
-│   ├── report_nlp_engine.py        # Deterministic report extractor + LLM deep extraction
+│   ├── clinical_summary_engine.py  # High-level coordinator for clinical OPD summaries
+│   ├── clinical/                   # Modular clinical domain processors:
+│   │   ├── lab_cleaner.py          # Lab name normalization, range parser, physiological classification
+│   │   ├── lab_processor.py        # Lab panel grouping, flowsheet builder, FIB-4/APRI liver scores
+│   │   ├── med_cleaner.py          # Active moiety cleaner, brand trimmer, dosage extractor
+│   │   ├── med_processor.py        # Medication specialty grouping, chronic refills, timeline matrix
+│   │   ├── condition_processor.py  # Chronic vs acute categorization, surgical/intervention detector
+│   │   ├── badge_synthesizer.py    # Risk badges (ESRD, CKD 1-5, CAD, DM, HTN, Anemia)
+│   │   └── emr_generator.py        # 1-Click EMR SOAP pre-consultation note synthesis
+│   ├── drug_safety_service.py      # Clinical drug safety service (dosing, renal, side effects, DDIs)
+│   ├── drug_safety_data.py         # Authoritative CDSS/FDC pharmacology knowledge tables
 │   ├── drug_photo_service.py       # Pill photo / appearance lookup (Medication_Info)
-│   ├── llm_client.py               # Single LM Studio (OpenAI-compatible) client
+│   ├── report_nlp_engine.py        # Deterministic report extractor + LLM deep extraction
+│   ├── llm_client.py               # Shared OpenAI-compatible local LLM client
 │   └── clinical_chat.py            # Chat grounding, prompts, offline fallback
 ├── routes/                         # Flask blueprints (thin HTTP wrappers)
 │   ├── pages.py  patient.py  drugs.py  ai.py  system.py
+├── tests/                          # Automated unit and integration test suite
+│   ├── test_patient_api.py         # REST API endpoints verification
+│   ├── test_clinical_processors.py # Cleaners, flowsheet, and classification tests
+│   └── test_drug_safety.py         # Single entity and FDC safety profile tests
 ├── templates/index.html            # Clinical dashboard template
 └── static/
     ├── css/styles.css              # Medical UI styling & dark/light theme
     └── js/
         ├── main.js                 # Entry point (ES module bootstrap)
         └── modules/                # state, utils, patient, banner, conditions, labs,
-                                    # reports, meds, drug-photo, chat, correlation,
-                                    # workspace, theme, events
+                                    # reports, meds, drug-photo, drug-safety, chat,
+                                    # correlation, workspace, theme, events
+```
+
+### Running Tests
+
+```bash
+python -m unittest discover -s tests -v
 ```
