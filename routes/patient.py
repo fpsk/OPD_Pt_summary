@@ -16,7 +16,10 @@ from clinical_common.launch import (
     LaunchBroker,
     build_relay_payload,
     get_last_query,
+    normalize_valid_roc_date,
     relay_async,
+    relay_date_async,
+    resolve_sticky_launch_date,
     set_last_query,
 )
 from clinical_common.roc_dates import today_roc
@@ -40,22 +43,19 @@ def format_launch_roc_date(date_val=None) -> str:
 
 def _resolve_launch_date(patient_id: str, raw_date) -> str:
     """
-    Explicit date wins. Without one, use the last queried patient's date, else a still-pending
-    launch for the same patient, else the patient's newest roster clinic day, else today.
+    Sticky visit date always wins once set. Without one, use explicit raw_date,
+    else a still-pending launch for the same patient, else the patient's newest
+    roster clinic day, else today.
     """
-    if raw_date is not None and str(raw_date).strip():
-        return format_launch_roc_date(raw_date)
     is_testing = bool(current_app.config.get("TESTING"))
-    last_date = get_last_query(default_date="", use_disk=not is_testing)["patient_date"]
-    if last_date:
-        return last_date
     prev = launch_broker.latest_for(patient_id)
-    if prev and prev.get("patient_date"):
-        return prev["patient_date"]
     roster = mcp_client.roster.get(patient_id)
-    if roster.get("clinic_date"):
-        return roster["clinic_date"]
-    return format_launch_roc_date(None)
+    fallback = (
+        (prev.get("patient_date") if prev else None)
+        or roster.get("clinic_date")
+        or ""
+    )
+    return resolve_sticky_launch_date(raw_date=raw_date, fallback_date=fallback, use_disk=not is_testing)
 
 
 def handle_launch_request():
@@ -153,6 +153,22 @@ def sse_events():
     return launch_broker.subscribe()
 
 
+@bp.route("/clinic-date", methods=["POST"])
+def api_set_clinic_date():
+    """Immediately persist and broadcast a manually edited sticky clinic visit date."""
+    payload = request.get_json(force=True, silent=True) or {}
+    raw_date = lookup_key(payload, LAUNCH_DATE_KEYS)
+    norm_date = normalize_valid_roc_date(raw_date)
+    if not norm_date:
+        return jsonify({"status": "error", "message": "Invalid ROC clinic date."}), 400
+    is_testing = bool(current_app.config.get("TESTING"))
+    set_last_query(patient_date=norm_date, persist=not is_testing)
+    delivered = launch_broker.publish_date(norm_date)
+    if not payload.get("relayed") and not is_testing:
+        relay_date_async(norm_date, SIBLING_PORTS)
+    return jsonify({"status": "ok", "patient_date": norm_date, "delivered": delivered}), 200
+
+
 @bp.route("/roster", methods=["GET"])
 def get_roster():
     """Return outpatient roster loaded from Cloud_Data."""
@@ -179,6 +195,7 @@ def get_patient_summary(id_no):
     demo_params = extract_demographics_from_dict(request.args.to_dict(), reference_date=clinic_date)
 
     try:
+        prev_sticky = get_last_query(default_date="", use_disk=not is_testing)["patient_date"]
         result = summary_engine.generate_patient_summary(
             id_no,
             clinic_date,
@@ -190,10 +207,16 @@ def get_patient_summary(id_no):
             gender=demo_params.get("gender"),
         )
         resolved_date = result.get("clinic_date") or clinic_date
+        new_sticky = ""
         if result.get("status") != "not_found":
             set_last_query(patient_date=resolved_date, patient_id=id_no, persist=not is_testing)
+            new_sticky = normalize_valid_roc_date(resolved_date) or ""
         elif raw_req_date:
             set_last_query(patient_date=raw_req_date, persist=not is_testing)
+            new_sticky = normalize_valid_roc_date(raw_req_date) or ""
+        if new_sticky and new_sticky != prev_sticky and not is_testing:
+            launch_broker.publish_date(new_sticky)
+            relay_date_async(new_sticky, SIBLING_PORTS)
         return jsonify(result)
     except Exception as e:
         logger.error(f"Error generating summary for {id_no}: {e}", exc_info=True)

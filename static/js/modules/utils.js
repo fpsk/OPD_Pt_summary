@@ -101,6 +101,19 @@ export function formatRocDate(d) {
     return s;
 }
 
+export function isValidRocDate(val) {
+    const raw = String(val ?? "").trim();
+    if (!raw) return false;
+    const norm = formatRocDate(raw);
+    if (!/^\d{7}$/.test(norm)) return false;
+    const y = parseInt(norm.substring(0, 3), 10) + 1911;
+    const m = parseInt(norm.substring(3, 5), 10);
+    const d = parseInt(norm.substring(5, 7), 10);
+    if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+    const dt = new Date(y, m - 1, d);
+    return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+}
+
 export function escapeHtml(str) {
     if (!str) return "";
     return String(str)

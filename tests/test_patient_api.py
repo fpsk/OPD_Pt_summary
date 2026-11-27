@@ -10,9 +10,17 @@ from app import create_app
 
 class PatientApiTestCase(unittest.TestCase):
     def setUp(self):
+        from routes.patient import launch_broker
+
+        launch_broker.reset()
         self.app = create_app()
         self.app.config["TESTING"] = True
         self.client = self.app.test_client()
+
+    def tearDown(self):
+        from routes.patient import launch_broker
+
+        launch_broker.reset()
 
     def test_health_check(self):
         response = self.client.get("/api/health")
@@ -130,6 +138,54 @@ class PatientApiTestCase(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.get_json().get("clinic_date"), "1150818")
         reset_last_query()
+
+    def test_clinic_date_endpoint_persists_and_validates(self):
+        res_ok = self.client.post("/api/clinic-date", json={"date": "1150630"})
+        self.assertEqual(res_ok.status_code, 200)
+        self.assertEqual(res_ok.get_json().get("patient_date"), "1150630")
+        cur = self.client.get("/api/launch/current").get_json()
+        self.assertEqual(cur.get("last_query_date"), "1150630")
+
+        for bad in ("11506", "1151301", ""):
+            res_bad = self.client.post("/api/clinic-date", json={"date": bad})
+            self.assertEqual(res_bad.status_code, 400)
+
+    def test_sticky_date_wins_over_incoming_launch_date(self):
+        self.client.post("/api/clinic-date", json={"date": "1150630"})
+
+        # Push without date follows sticky date 1150630
+        res1 = self.client.post(
+            "/launch",
+            json={
+                "patientID": "E220445280",
+                "name": "Test",
+                "birthdate": "0550101",
+                "relayed": True,
+            },
+        )
+        self.assertEqual(res1.status_code, 200)
+        self.assertEqual(res1.get_json().get("patient_date"), "1150630")
+
+        # Push with a different date still follows sticky date 1150630
+        res2 = self.client.post(
+            "/launch",
+            json={
+                "patientID": "Q122601701",
+                "date": "1151127",
+                "relayed": True,
+            },
+        )
+        self.assertEqual(res2.status_code, 200)
+        self.assertEqual(res2.get_json().get("patient_date"), "1150630")
+
+        # Editing sticky date via /api/clinic-date updates next /launch immediately
+        self.client.post("/api/clinic-date", json={"date": "1150701"})
+        res3 = self.client.post(
+            "/launch",
+            json={"patientID": "B100134889", "relayed": True},
+        )
+        self.assertEqual(res3.status_code, 200)
+        self.assertEqual(res3.get_json().get("patient_date"), "1150701")
 
 
 if __name__ == "__main__":

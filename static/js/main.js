@@ -2,11 +2,11 @@
  * OPD Patient Clinical Summarizer - frontend entry point (bootstrap only).
  * Feature code lives in ./modules/*.js; shared mutable state in modules/state.js.
  */
-import { setupEventListeners } from "./modules/events.js";
+import { commitClinicDate, setupEventListeners } from "./modules/events.js";
 import { checkSystemHealth, loadPatientSummary, loadRoster } from "./modules/patient.js";
 import { state } from "./modules/state.js";
 import { initTheme } from "./modules/theme.js";
-import { formatRocDate } from "./modules/utils.js";
+import { formatRocDate, isValidRocDate } from "./modules/utils.js";
 import { switchWorkspaceView } from "./modules/workspace.js";
 import { openDrugPhotoModalFromBtn } from "./modules/drug-photo.js";
 import { setupDrugSafetyModalEvents, openDrugSafetyModalFromBtn } from "./modules/drug-safety.js";
@@ -117,7 +117,14 @@ function showLaunchPrompt(patientId, patientDate) {
 function handleIncomingLaunch(data) {
     if (!data || !data.patient_id) return;
     const newId = (data.patient_id || "").trim().toUpperCase();
-    const displayDate = formatRocDate(data.patient_date || data.standard_date || state.lastQueryDate || "1150721");
+    const dateInputEl = document.getElementById("clinicDateInput");
+    const typedRaw = dateInputEl ? dateInputEl.value.trim() : "";
+    const typedRoc = isValidRocDate(typedRaw) ? formatRocDate(typedRaw) : "";
+    let displayDate = formatRocDate(data.patient_date || data.standard_date || state.lastQueryDate || "1150721");
+    if (typedRoc && typedRoc !== (state.lastQueryDate || "")) {
+        commitClinicDate(typedRoc);
+        displayDate = typedRoc;
+    }
     const sig = `${newId}|${displayDate}|${data.chart_no || data.chartNo || ""}|${data.age ?? ""}|${data.birth_date || data.birthdate || ""}|${data.launch_ts || ""}`;
     if (sig === lastHandledLaunchSignature && state.currentPatientData && state.currentPatientData.patient_id === newId) {
         return;
@@ -125,6 +132,15 @@ function handleIncomingLaunch(data) {
     lastHandledLaunchSignature = sig;
     dismissLaunchPrompt();
     loadIncomingPatient(newId, displayDate, data);
+}
+
+function applySyncedClinicDate(rawDate) {
+    if (!isValidRocDate(rawDate)) return;
+    const rocDt = formatRocDate(rawDate);
+    const dateInput = document.getElementById("clinicDateInput");
+    if (dateInput) dateInput.value = rocDt;
+    state.lastQueryDate = rocDt;
+    try { localStorage.setItem("opd_last_query_date", rocDt); } catch (e) {}
 }
 
 function initSseConsumer() {
@@ -142,6 +158,16 @@ function initSseConsumer() {
                 handleIncomingLaunch(data);
             } catch (err) {
                 console.error("[SSE] Failed to parse launch event:", err);
+            }
+        });
+        sseEventSource.addEventListener("clinic_date", (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data && data.patient_date) {
+                    applySyncedClinicDate(data.patient_date);
+                }
+            } catch (err) {
+                console.error("[SSE] Failed to parse clinic_date event:", err);
             }
         });
     } catch (e) {

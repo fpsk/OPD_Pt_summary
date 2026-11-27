@@ -2,7 +2,7 @@
  * Wires all static DOM event listeners (tabs, toggles, filters, modals, chat).
  */
 import { state } from "./state.js";
-import { formatRocDate } from "./utils.js";
+import { formatRocDate, isValidRocDate } from "./utils.js";
 import { clearChatHistory, sendChatMessage, toggleChatDock } from "./chat.js";
 import { applyCorrelationPreset, renderCorrelationPlot, setAllCorrCheckboxes } from "./correlation.js";
 import { closeDrugPhotoModal, initDrugModalDraggable, toggleDrugModalExpand } from "./drug-photo.js";
@@ -13,8 +13,29 @@ import { renderRadiologyReports } from "./reports.js";
 import { toggleTheme } from "./theme.js";
 import { switchWorkspaceView } from "./workspace.js";
 
+export function commitClinicDate(rawVal) {
+    const raw = String(rawVal ?? "").trim();
+    if (!isValidRocDate(raw)) return null;
+    const norm = formatRocDate(raw);
+    const prevDate = state.lastQueryDate || "";
+    const dateEl = document.getElementById("clinicDateInput");
+    if (dateEl && dateEl.value !== norm) {
+        dateEl.value = norm;
+    }
+    state.lastQueryDate = norm;
+    try { localStorage.setItem("opd_last_query_date", norm); } catch (err) {}
+    if (norm !== prevDate) {
+        fetch("/api/clinic-date", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ date: norm }),
+        }).catch(() => {});
+    }
+    return norm;
+}
+
 export function setupEventListeners() {
-    // Roster dropdown select (if present)
+    // Roster dropdown select (if present) — keep current sticky visit date
     const rosterSelect = document.getElementById("rosterSelect");
     if (rosterSelect) {
         rosterSelect.addEventListener("change", (e) => {
@@ -22,14 +43,8 @@ export function setupEventListeners() {
             if (pid) {
                 state.userInitiatedReview = true;
                 document.getElementById("patientIdInput").value = pid;
-                const selOpt = e.target.selectedOptions && e.target.selectedOptions[0];
-                const optDate = selOpt?.dataset?.clinicDate;
-                const rawDate = optDate || document.getElementById("clinicDateInput")?.value?.trim() || state.lastQueryDate || "1150721";
-                const date = formatRocDate(rawDate);
-                const dateEl = document.getElementById("clinicDateInput");
-                if (dateEl) dateEl.value = date;
-                state.lastQueryDate = date;
-                try { localStorage.setItem("opd_last_query_date", date); } catch (err) {}
+                const rawDate = document.getElementById("clinicDateInput")?.value?.trim() || state.lastQueryDate || "1150721";
+                const date = commitClinicDate(rawDate) || formatRocDate(rawDate);
                 loadPatientSummary(pid, date);
             }
         });
@@ -44,14 +59,18 @@ export function setupEventListeners() {
         searchBtn.addEventListener("click", () => {
             const pid = patientIdInput.value.trim();
             const rawDate = clinicDateInput.value.trim() || state.lastQueryDate || "1150721";
-            const date = formatRocDate(rawDate);
-            clinicDateInput.value = date;
-            state.lastQueryDate = date;
-            try { localStorage.setItem("opd_last_query_date", date); } catch (err) {}
+            const date = commitClinicDate(rawDate) || formatRocDate(rawDate);
             if (pid) {
                 state.userInitiatedReview = true;
                 loadPatientSummary(pid, date);
             }
+        });
+
+        clinicDateInput.addEventListener("change", () => {
+            commitClinicDate(clinicDateInput.value);
+        });
+        clinicDateInput.addEventListener("blur", () => {
+            commitClinicDate(clinicDateInput.value);
         });
 
         // Enter key triggers search
